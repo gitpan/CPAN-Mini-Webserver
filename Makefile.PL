@@ -10,7 +10,7 @@ WriteMakefile(
     PREREQ_PM    => {
         'App::Cache'                => '0',
         'Convert::UU'               => '0',
-        'CPAN::Mini'                => '0',
+        'CPAN::Mini'                => '0.565',
         'HTTP::Server::Simple::CGI' => '0',
         'IO::Capture::Stdout'       => '0',
         'Moose'                     => '0',
@@ -24,6 +24,6 @@ WriteMakefile(
         'Template::Declare'         => '0',
         'Test::More'                => '0',
     },
-    'EXE_FILES' => [ 'bin/minicpan_webserver' ],
+    'EXE_FILES' => ['bin/minicpan_webserver'],
 );
 

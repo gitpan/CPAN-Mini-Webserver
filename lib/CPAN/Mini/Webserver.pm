@@ -21,12 +21,12 @@ has 'pauseid'             => ( is => 'rw' );
 has 'distvname'           => ( is => 'rw' );
 has 'filename'            => ( is => 'rw' );
 
-our $VERSION = '0.32';
+our $VERSION = '0.33';
 
 sub after_setup_listener {
     my $self      = shift;
     my %config    = CPAN::Mini->read_config;
-    my $directory = dir( $config{local} );
+    my $directory = dir( glob $config{local} );
     $self->directory($directory);
     my $authors_filename = file( $directory, 'authors', '01mailrc.txt.gz' );
     my $packages_filename
