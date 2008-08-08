@@ -21,8 +21,10 @@ has 'pauseid'             => ( is => 'rw' );
 has 'distvname'           => ( is => 'rw' );
 has 'filename'            => ( is => 'rw' );
 
-our $VERSION = '0.33';
+our $VERSION = '0.34';
 
+# this is a hook that HTTP::Server::Simple calls after setting up the
+# listening socket. we use it load the indexes
 sub after_setup_listener {
     my $self      = shift;
     my %config    = CPAN::Mini->read_config;
@@ -50,6 +52,7 @@ sub handle_request {
     my ( $self, $cgi ) = @_;
     $self->cgi($cgi);
     my $path = $cgi->path_info();
+
     my ( $raw, $pauseid, $distvname, $filename );
     if ( $path =~ m{^/~} ) {
         ( undef, $pauseid, $distvname, $filename ) = split( '/', $path, 4 );
@@ -78,6 +81,8 @@ sub handle_request {
         $self->distribution_page();
     } elsif ($pauseid) {
         $self->author_page();
+    } elsif ( $path =~ m{^/package/} ) {
+        $self->package_page();
     } elsif ( $path eq '/static/css/screen.css' ) {
         $self->css_screen_page();
     } elsif ( $path eq '/static/css/print.css' ) {
@@ -86,6 +91,10 @@ sub handle_request {
         $self->css_ie_page();
     } elsif ( $path eq '/static/images/logo.png' ) {
         $self->images_logo_page();
+    } elsif ( $path eq '/static/images/favicon.png' ) {
+        $self->images_favicon_page();
+    } elsif ( $path eq '/static/xml/opensearch.xml' ) {
+        $self->opensearch_page();
     } else {
         print "HTTP/1.0 404 Not found\r\n";
         print $cgi->header,
@@ -175,19 +184,7 @@ sub distribution_page {
         = grep { $_->cpanid eq uc $pauseid && $_->distvname eq $distvname }
         $self->parse_cpan_packages->distributions;
 
-    my $file
-        = file( $self->directory, 'authors', 'id', $distribution->prefix );
-
-    my @filenames;
-    if ( $file =~ /\.tar\.gz$/ ) {
-
-        # warn "tar fzt $file";
-        @filenames = sort `tar fzt $file`;
-        chomp @filenames;
-        @filenames = grep { $_ !~ m{/$} } @filenames;
-    } else {
-        die "Unknown distribution format $file";
-    }
+    my @filenames = $self->list_files($distribution);
 
     print "HTTP/1.0 200 OK\r\n";
     print $cgi->header;
@@ -227,6 +224,8 @@ sub file_page {
 
     my $parser = Pod::Simple::HTML->new;
     $parser->index(0);
+    $parser->no_whining(1);
+    $parser->no_errata_section(1);
     $parser->output_string( \my $html );
     $parser->parse_string_document($contents);
     $html =~ s/^.*<!-- start doc -->//s;
@@ -319,11 +318,53 @@ sub raw_page {
             filename     => $filename,
             pauseid      => $pauseid,
             distvname    => $distvname,
-
-            contents => $contents,
-            html     => $html,
+            contents     => $contents,
+            html         => $html,
         }
     );
+}
+
+sub package_page {
+    my $self = shift;
+    my $cgi  = $self->cgi;
+    my $path = $cgi->path_info();
+    my ( $pauseid, $distvname, $package )
+        = $path =~ m{^/package/(.+?)/(.+?)/(.+?)/$};
+
+    my ($p) = grep {
+               $_->package                 eq $package
+            && $_->distribution->distvname eq $distvname
+            && $_->distribution->cpanid    eq uc($pauseid)
+    } $self->parse_cpan_packages->packages;
+    my $distribution = $p->distribution;
+    my @filenames    = $self->list_files($distribution);
+    my $postfix      = $package;
+    $postfix =~ s{^.+::}{}g;
+    $postfix .= '.pm';
+    my ($filename)
+        = grep { $_ =~ /$postfix$/ }
+        sort { length($a) <=> length($b) } @filenames;
+    my $url = "http://localhost:8080/~$pauseid/$distvname/$filename";
+
+    print "HTTP/1.0 302 OK\r\n";
+    print $cgi->redirect($url);
+}
+
+sub list_files {
+    my ( $self, $distribution ) = @_;
+    my $file
+        = file( $self->directory, 'authors', 'id', $distribution->prefix );
+    my @filenames;
+
+    if ( $file =~ /\.tar\.gz$/ ) {
+
+        # warn "tar fzt $file";
+        @filenames = sort `tar fzt $file`;
+        chomp @filenames;
+        @filenames = grep { $_ !~ m{/$} } @filenames;
+    } else {
+        die "Unknown distribution format $file";
+    }
 }
 
 sub css_screen_page {
@@ -362,6 +403,27 @@ sub images_logo_page {
     print Template::Declare->show('images_logo');
 }
 
+sub images_favicon_page {
+    my $self = shift;
+    my $cgi  = $self->cgi;
+
+    print "HTTP/1.0 200 OK\r\n";
+    print $cgi->header( -type => 'image/png', -expires => '+1d' );
+    print Template::Declare->show('images_favicon');
+}
+
+sub opensearch_page {
+    my $self = shift;
+    my $cgi  = $self->cgi;
+
+    print "HTTP/1.0 200 OK\r\n";
+    print $cgi->header(
+        -type    => 'application/opensearchdescription+xml',
+        -expires => '+1d'
+    );
+    print Template::Declare->show('opensearch');
+}
+
 1;
 
 __END__
@@ -381,6 +443,14 @@ you to search and browse Mini CPAN. First you must install
 CPAN::Mini and create a local copy of CPAN using minicpan.
 Then you may run minicpan_webserver and search and 
 browse Mini CPAN at http://localhost:8080/.
+
+You may access the Subversion repository at:
+
+  http://code.google.com/p/cpan-mini-webserver/
+
+And may join the mailing list at:
+
+  http://groups.google.com/group/cpan-mini-webserver
 
 =head1 AUTHOR
 

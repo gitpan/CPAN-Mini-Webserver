@@ -28,6 +28,21 @@ private template 'header' => sub {
         };
         outs_raw
             '<!--[if IE]><link rel="stylesheet" href="/static/css/ie.css" type="text/css" media="screen, projection"><![endif]-->';
+        link {
+            attr {
+                rel  => 'icon',
+                href => '/static/images/favicon.png',
+                type => 'image/png',
+            }
+        };
+        link {
+            attr {
+                rel   => 'search',
+                href  => '/static/xml/opensearch.xml',
+                type  => 'application/opensearchdescription+xml',
+                title => 'minicpan search',
+            }
+        };
 
         meta { attr { generator => 'CPAN::Mini::Webserver' } };
     }
@@ -68,9 +83,10 @@ private template 'package_link' => sub {
     my ( $self, $package ) = @_;
     my $distribution = $package->distribution;
     a {
-        attr {    href => '/~'
+        attr {    href => '/package/'
                 . lc( $distribution->cpanid ) . '/'
-                . $distribution->distvname
+                . $distribution->distvname . '/'
+                . $package->package
                 . '/' };
         $package->package;
     };
@@ -373,6 +389,19 @@ template 'raw' => sub {
         };
 
     }
+};
+
+template 'opensearch' => sub {
+    my $self = shift;
+    outs_raw q| <?xml version="1.0" encoding="UTF-8"?>
+<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
+<ShortName>minicpan_webserver</ShortName>
+<Description>Search minicpan</Description>
+<InputEncoding>UTF-8</InputEncoding>
+<Image width="16" height="16">data:image/png,%89PNG%0D%0A%1A%0A%00%00%00%0DIHDR%00%00%00%10%00%00%00%10%08%03%00%00%00(-%0FS%00%00%00%01sRGB%00%AE%CE%1C%E9%00%00%003PLTE8%00%00%05%08%04%16%18%15%1E%1F%1D!%22%20%26(%26%2C-%2B130%3B%3D%3AFHELMKXZWegdxyw%84%86%83%9E%A0%9D%CC%CE%CBjq%F6r%00%00%00%01tRNS%00%40%E6%D8f%00%00%00lIDAT%18%D3u%8FY%0E%C20%0C%05%BD%AF)%ED%FDO%0B%85%10%15%04%EF%C7%1A%7B%2C%D9%00%7Fr%C4W%A3u%EB%2B%EFn%E3sAnr1%8E%E11%D4rq%1Bn%9E%CC%8B%15%C5%01%14u%B2%A0%3EmA9K1Z%BD%5C%C6%87%18%B4%18%8A0%A0Q%2B%C3%CC%232%9D%CE%19%E1%3B%3C%E6%E6%CA%BC%C4%A5%BB%C2%84%FC%D7%DBw%7BS%02%E3Ki%23G%00%00%00%00IEND%AEB%60%82</Image>
+<Url type="text/html" method="get" template="http://localhost:8080/search/?q={searchTerms}"/>
+</OpenSearchDescription>
+|;
 };
 
 template 'css_screen' => sub {
@@ -747,6 +776,22 @@ M=6%B8&0``D9F9A86%C9.55$S<$3?V.S!D;89YL.;^0;(I?K)^57)\0G%O0<@
 M.7W%BE4K%FZ#&^G)Q,3$"`10@UG8>!3`!>GEA<O7+EUT#>[.9<17%$W<[)P\
 MO+P\W-Q@@E-$L>X&A77/S5UKYDUN+,E)B@QTMM"1$Q7HQ%U/`@`VR1C"JK@]
 -VP````!)14Y$KD)@@@``
+`
+end
+|;
+    my ( $string, $filename, $mode ) = uudecode($uuencoded);
+    outs_raw $string;
+};
+
+template 'images_favicon' => sub {
+    my $self      = shift;
+    my $uuencoded = q|begin 644 favicon.png
+MB5!.1PT*&@H````-24A$4@```!`````0"`,````H+0]3`````7-21T(`KLX<
+MZ0```#-03%1%.```!0@$%A@5'A\=(2(@)B@F+"TK,3,P.STZ1DA%3$U+6%I7
+M96=D>'EWA(:#GJ"=S,[+:G'V<@````%T4DY3`$#FV&8```!L241!5!C3=8]9
+M#L(P#`6]KRGM_4\+A1`5!._'&GLLV0!_<L17HW7K*^]NXW-!;G(QCN$QU')Q
+M&VZ>S(L5Q0$4=;*@/FU!.4LQ6KU<QH<8M!B*,*!1*\/,(S*=SAGA.SSFYLJ\
+=Q*6[PH3\U]MW>U,"XTMI(T<`````245.1*Y"8((`
 `
 end
 |;
