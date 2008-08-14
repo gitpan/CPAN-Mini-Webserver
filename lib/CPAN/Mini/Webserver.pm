@@ -1,7 +1,9 @@
 package CPAN::Mini::Webserver;
 use App::Cache;
 use CPAN::Mini::App;
+use CPAN::Mini::Webserver::Index;
 use CPAN::Mini::Webserver::Templates;
+use List::MoreUtils qw(uniq);
 use Moose;
 use Parse::CPAN::Authors;
 use Parse::CPAN::Packages;
@@ -10,18 +12,22 @@ use Path::Class;
 use PPI;
 use PPI::HTML;
 use Template::Declare;
+use Term::ProgressBar::Quiet;
+
 Template::Declare->init( roots => ['CPAN::Mini::Webserver::Templates'] );
 
 extends 'HTTP::Server::Simple::CGI';
 has 'cgi'                 => ( is => 'rw', isa => 'CGI' );
 has 'directory'           => ( is => 'rw', isa => 'Path::Class::Dir' );
+has 'scratch'             => ( is => 'rw', isa => 'Path::Class::Dir' );
 has 'parse_cpan_authors'  => ( is => 'rw', isa => 'Parse::CPAN::Authors' );
 has 'parse_cpan_packages' => ( is => 'rw', isa => 'Parse::CPAN::Packages' );
 has 'pauseid'             => ( is => 'rw' );
 has 'distvname'           => ( is => 'rw' );
 has 'filename'            => ( is => 'rw' );
+has 'index' => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' );
 
-our $VERSION = '0.35';
+our $VERSION = '0.36';
 
 # this is a hook that HTTP::Server::Simple calls after setting up the
 # listening socket. we use it load the indexes
@@ -46,6 +52,13 @@ sub after_setup_listener {
 
     $self->parse_cpan_authors($parse_cpan_authors);
     $self->parse_cpan_packages($parse_cpan_packages);
+
+    my $scratch = dir( $cache->scratch );
+    $self->scratch($scratch);
+
+    my $index = CPAN::Mini::Webserver::Index->new;
+    $self->index($index);
+    $index->create_index( $parse_cpan_authors, $parse_cpan_packages );
 }
 
 sub handle_request {
@@ -81,6 +94,8 @@ sub handle_request {
         $self->distribution_page();
     } elsif ($pauseid) {
         $self->author_page();
+    } elsif ( $path =~ m{^/perldoc} ) {
+        $self->pod_page();
     } elsif ( $path =~ m{^/package/} ) {
         $self->package_page();
     } elsif ( $path eq '/static/css/screen.css' ) {
@@ -92,6 +107,8 @@ sub handle_request {
     } elsif ( $path eq '/static/images/logo.png' ) {
         $self->images_logo_page();
     } elsif ( $path eq '/static/images/favicon.png' ) {
+        $self->images_favicon_page();
+    } elsif ( $path eq '/favicon.ico' ) {
         $self->images_favicon_page();
     } elsif ( $path eq '/static/xml/opensearch.xml' ) {
         $self->opensearch_page();
@@ -119,26 +136,31 @@ sub search_page {
     my $cgi  = $self->cgi;
     my $q    = $cgi->param('q');
 
-    my @authors = sort { $a->name cmp $b->name }
-        grep { $_->name =~ /$q/i || $_->pauseid =~ /$q/i }
-        $self->parse_cpan_authors->authors;
-    my @distributions = sort {
+    my $index   = $self->index;
+    my @results = $index->search($q);
+    my @authors
+        = uniq grep { ref($_) eq 'Parse::CPAN::Authors::Author' } @results;
+    my @distributions
+        = uniq grep { ref($_) eq 'Parse::CPAN::Packages::Distribution' }
+        @results;
+    my @packages
+        = uniq grep { ref($_) eq 'Parse::CPAN::Packages::Package' } @results;
+
+    @authors = sort { $a->name cmp $b->name } @authors;
+
+    @distributions = sort {
         my @acount = $a->dist =~ /-/g;
         my @bcount = $b->dist =~ /-/g;
         scalar(@acount) <=> scalar(@bcount)
             || $a->dist cmp $b->dist
-        }
-        grep {
-        $_->dist && $_->dist =~ /$q/i
-        } $self->parse_cpan_packages->latest_distributions;
-    my @packages = sort {
+    } @distributions;
+
+    @packages = sort {
         my @acount = $a->package =~ /::/g;
         my @bcount = $b->package =~ /::/g;
         scalar(@acount) <=> scalar(@bcount)
             || $a->package cmp $b->package
-        } grep {
-        $_->package =~ /$q/i
-        } $self->parse_cpan_packages->packages;
+    } @packages;
 
     print "HTTP/1.0 200 OK\r\n";
     print $cgi->header;
@@ -199,6 +221,21 @@ sub distribution_page {
     );
 }
 
+sub pod_page {
+    my $self      = shift;
+    my $cgi       = $self->cgi;
+    my ($pkgname) = $cgi->keywords;
+
+    my $m = $self->parse_cpan_packages->package($pkgname);
+    my $d = $m->distribution;
+
+    my ( $pauseid, $distvname ) = ( $d->cpanid, $d->distvname );
+    my $url = "/package/$pauseid/$distvname/$pkgname/";
+
+    print "HTTP/1.0 302 OK\r\n";
+    print $cgi->redirect($url);
+}
+
 sub file_page {
     my $self      = shift;
     my $cgi       = $self->cgi;
@@ -223,6 +260,7 @@ sub file_page {
     }
 
     my $parser = Pod::Simple::HTML->new;
+    $parser->perldoc_url_prefix('http://localhost:2963/perldoc?');
     $parser->index(0);
     $parser->no_whining(1);
     $parser->no_errata_section(1);
@@ -274,7 +312,7 @@ sub raw_page {
 
     my $html;
 
-    if ( $filename =~ /\.(pm|pl|PL)$/ ) {
+    if ( $filename =~ /\.(pm|pl|PL|t)$/ ) {
         my $document  = PPI::Document->new( \$contents );
         my $highlight = PPI::HTML->new( line_numbers => 0 );
         my $pretty    = $highlight->html($document);
@@ -287,15 +325,8 @@ sub raw_page {
             "$split$_";
         } split /$split/, $pretty;
 
-        # right-justify the line number
-        #  @lines = map {
-        #    s{<span class="line_number"> ?(\d+) ?:}{
-        #      my $line = $1;
-        #      my $size = 4 - (length($1));
-        #      $size = 0 if $size < 0;
-        #      '<span class="line_number">' . ("&nbsp;" x $size) . "$line:"}e;
-        #    $_;
-        #  } @lines;
+        # remove the extra line number tag
+        @lines = map { s{<span class="line_number">}{}; $_ } @lines;
 
         # remove newlines
         $_ =~ s{<br>}{}g foreach @lines;
@@ -303,7 +334,7 @@ sub raw_page {
         # link module names to search.cpan.org
         @lines = map {
             $_
-                =~ s{<span class="word">([^<]+?::[^<]+?)</span>}{<span class="word"><a href="http://search.cpan.org/perldoc?$1">$1</a></span>};
+                =~ s{<span class="word">([^<]+?::[^<]+?)</span>}{<span class="word"><a href="http://localhost:2963/perldoc?$1">$1</a></span>};
             $_;
         } @lines;
         $html = join '', @lines;
@@ -343,7 +374,7 @@ sub package_page {
     $postfix .= '.pm';
     my ($filename) = grep { $_ =~ /$postfix$/ }
         sort { length($a) <=> length($b) } @filenames;
-    my $url = "http://localhost:8080/~$pauseid/$distvname/$filename";
+    my $url = "http://localhost:2963/~$pauseid/$distvname/$filename";
 
     print "HTTP/1.0 302 OK\r\n";
     print $cgi->redirect($url);
@@ -441,7 +472,7 @@ This module is the driver that provides a web server that allows
 you to search and browse Mini CPAN. First you must install
 CPAN::Mini and create a local copy of CPAN using minicpan.
 Then you may run minicpan_webserver and search and 
-browse Mini CPAN at http://localhost:8080/.
+browse Mini CPAN at http://localhost:2963/.
 
 You may access the Subversion repository at:
 
