@@ -9,6 +9,7 @@ WriteMakefile(
     LICENSE      => 'perl',
     PREREQ_PM    => {
         'App::Cache'               => '0',
+        'CGI'                      => '3.16',
         'Convert::UU'              => '0',
         'CPAN::Mini'               => '0.565',
         'HTTP::Server::Simple'     => '0.34',
@@ -16,6 +17,7 @@ WriteMakefile(
         'List::MoreUtils'          => '0',
         'Moose'                    => '0',
         'Parse::CPAN::Authors'     => '0',
+        'Parse::CPAN::Meta'        => '0',
         'Parse::CPAN::Packages'    => '0',
         'Path::Class'              => '0',
         'Pod::Simple::HTML'        => '0',
@@ -24,7 +26,6 @@ WriteMakefile(
         'PPI::HTML'                => '0',
         'Search::QueryParser'      => '0',
         'Template::Declare'        => '0.29',
-        'Term::ProgressBar::Quiet' => '0',
         'Test::More'               => '0',
     },
     'EXE_FILES' => ['bin/minicpan_webserver'],

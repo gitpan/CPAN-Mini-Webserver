@@ -211,7 +211,7 @@ template 'search' => sub {
                         }
                         outs_raw '</table>';
                     } else {
-                        p { 'No results found.' };
+                        p {'No results found.'};
                     }
                     show('footer');
                 };
@@ -227,6 +227,7 @@ template 'author' => sub {
     my $pauseid       = $arguments->{pauseid};
     my $distvname     = $arguments->{distvname};
     my @distributions = @{ $arguments->{distributions} };
+    my $dates         = $arguments->{dates};
 
     html {
         show( 'header', $author->name );
@@ -244,6 +245,9 @@ template 'author' => sub {
                                 show( 'distribution_link', $distribution );
 
                             };
+                            cell {
+                                outs $dates->{ $distribution->distvname };
+                            };
                         };
                     }
                     outs_raw '</table>';
@@ -256,6 +260,65 @@ template 'author' => sub {
     }
 };
 
+private template 'dependencies' => sub {
+    my ( $self, $meta, $pcp ) = @_;
+
+    div {
+        attr { class => 'dependencies' };
+        h2 {'Dependencies'};
+        ul {
+            foreach
+                my $deptype (qw(requires build_requires configure_requires))
+            {
+                if ( defined $meta->{$deptype} ) {
+                    foreach my $package ( keys %{ $meta->{$deptype} } ) {
+                        next if $package eq 'perl';
+                        my $d = $pcp->package($package)->distribution;
+                        next unless $d;
+                        my $distvname = $d->distvname;
+                        my $author    = $d->cpanid;
+                        li {
+                            a {
+                                attr { href => "/~$author/$distvname/" };
+                                $package;
+                            };
+                            if ( $deptype =~ /(.*?)_/ ) {
+                                outs " ($1 requirement)";
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+};
+
+private template 'metadata' => sub {
+    my ( $self, $meta ) = @_;
+
+    h2 {'Metadata'};
+    div {
+        attr { class => 'metadata' };
+        dl {
+            foreach my $key ( qw(abstract license), 'release date' ) {
+                if ( defined $meta->{$key} ) {
+                    dt { ucfirst $key; };
+                    dd { $meta->{$key} };
+                }
+                foreach my $datum ( keys %{ $meta->{resources} } ) {
+                    dt { ucfirst $datum; }
+                    dd {
+                        a {
+                            attr { href => $meta->{resources}->{$datum}; };
+                            $meta->{resources}->{$datum};
+                        }
+                    };
+                }
+            }
+        }
+    };
+};
+
 template 'distribution' => sub {
     my ( $self, $arguments ) = @_;
     my $author       = $arguments->{author};
@@ -263,35 +326,66 @@ template 'distribution' => sub {
     my $distvname    = $arguments->{distvname};
     my $distribution = $arguments->{distribution};
     my @filenames    = @{ $arguments->{filenames} };
+    my $meta         = $arguments->{meta};
+    my $pcp          = $arguments->{pcp};
     html {
         show( 'header', $author->name . ' > ' . $distvname );
         body {
             div {
                 attr { class => 'container' };
                 div {
-                    attr { class => 'span-24' };
+                    attr { class => 'span-24 last' };
                     show('searchbar');
                     h1 {
                         show( 'author_link', $author );
                         outs ' > ';
                         show( 'distribution_link', $distribution );
                     };
+                }
+                div {
+                    attr { class => 'span-18 last' };
+
                     outs_raw '<table>';
                     foreach my $filename (@filenames) {
+                        my $class
+                            = ( $filename =~ m{/(lib|t|inc)/} )
+                            ? $1
+                            : 'notcode';
                         my $href
                             = ( $filename =~ /\.(pm|PL|pod)$/ )
                             ? "/~$pauseid/$distvname/$filename"
                             : "/raw/~$pauseid/$distvname/$filename";
                         row {
                             cell {
+                                attr { class => $class } if $class;
                                 a {
                                     attr { href => $href };
-                                    $filename;
+                                    span {
+                                        attr { class => $class } if $class;
+                                        $filename;
+                                    };
                                 };
                             };
                         };
                     }
                     outs_raw '</table>';
+                };
+                div {
+                    attr { class => 'span-6 last' };
+                    show( 'metadata', $meta );
+                    show( 'dependencies', $meta, $pcp );
+                    h2 {'Download'};
+                    div {
+                        a {
+                            attr {    href => '/download/~'
+                                    . $author->pauseid
+                                    . "/$distvname" };
+                            $distribution->filename;
+                        }
+                    };
+                };
+                div {
+                    attr { class => 'span-24 last' };
                     show('footer');
                 };
 
@@ -387,6 +481,15 @@ template 'raw' => sub {
                     } else {
                         pre {$contents};
                     }
+                    div {
+                        attr { class => 'download-link' };
+                        a {
+                            attr {    href => '/download/~'
+                                    . $author->pauseid
+                                    . "/$distvname/$filename" };
+                            "Download as plain text";
+                        };
+                    };
                     show('footer');
                 };
 
@@ -657,7 +760,10 @@ div#searchbar {min-height:10em;display:table-cell;vertical-align:middle;}
 .number {color:#B452CD;}
 .single {color:#CD5555;}
 .double {color:#CD5555;}
-
+.inc {display:none;}
+.lib {color:#000099;}
+.t {color:#000066;}
+.notcode {color:#000033;}
 
 /* buttons */
 a.button, button {display:block;float:left;margin:0 0.583em 0.667em 0;padding:5px 10px 5px 7px;border:1px solid #dedede;border-top:1px solid #eee;border-left:1px solid #eee;background-color:#f5f5f5;font-family:"Lucida Grande", Tahoma, Arial, Verdana, sans-serif;font-size:100%;line-height:130%;text-decoration:none;font-weight:bold;color:#565656;cursor:pointer;}

@@ -7,6 +7,7 @@ use List::MoreUtils qw(uniq);
 use Moose;
 use Parse::CPAN::Authors;
 use Parse::CPAN::Packages;
+use Parse::CPAN::Meta;
 use Pod::Simple::HTML;
 use Path::Class;
 use PPI;
@@ -16,7 +17,13 @@ use Term::ProgressBar::Quiet;
 
 Template::Declare->init( roots => ['CPAN::Mini::Webserver::Templates'] );
 
-extends 'HTTP::Server::Simple::CGI';
+if ( eval { require HTTP::Server::Simple::Bonjour } ) {
+    extends 'HTTP::Server::Simple::Bonjour', 'HTTP::Server::Simple::CGI';
+} else {
+    extends 'HTTP::Server::Simple::CGI';
+}
+
+has 'hostname'            => ( is => 'rw' );
 has 'cgi'                 => ( is => 'rw', isa => 'CGI' );
 has 'directory'           => ( is => 'rw', isa => 'Path::Class::Dir' );
 has 'scratch'             => ( is => 'rw', isa => 'Path::Class::Dir' );
@@ -27,7 +34,50 @@ has 'distvname'           => ( is => 'rw' );
 has 'filename'            => ( is => 'rw' );
 has 'index' => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' );
 
-our $VERSION = '0.36';
+our $VERSION = '0.37';
+
+sub service_name {
+    "$ENV{USER}'s minicpan_webserver";
+}
+
+sub get_file_from_tarball {
+    my ( $self, $distribution, $filename ) = @_;
+
+    my $file
+        = file( $self->directory, 'authors', 'id', $distribution->prefix );
+
+    die "unknown distribution format $file"
+        unless ( $file =~ /\.(?:tar\.gz|tgz)$/ );
+
+    # warn "tar fzxO $file $filename";
+    my $contents = `tar fzxO $file $filename`;
+    return $contents;
+}
+
+sub checksum_data_for_author {
+    my ( $self, $pauseid ) = @_;
+
+    my $file = file(
+        $self->directory, 'authors', 'id',
+        substr( $pauseid, 0, 1 ),
+        substr( $pauseid, 0, 2 ),
+        $pauseid, 'CHECKSUMS',
+    );
+
+    return unless -f $file;
+
+    my ( $content, $cksum );
+    {
+        local $/;
+        open my $fh, "$file" or die "$file: $!";
+        $content = <$fh>;
+        close $fh;
+    }
+
+    eval $content;
+
+    return $cksum;
+}
 
 # this is a hook that HTTP::Server::Simple calls after setting up the
 # listening socket. we use it load the indexes
@@ -63,24 +113,34 @@ sub after_setup_listener {
 
 sub handle_request {
     my ( $self, $cgi ) = @_;
+    eval { $self->_handle_request($cgi) };
+    if ($@) {
+        print "HTTP/1.0 500\r\n", $cgi->header,
+            "<h1>Internal Server Error</h1>", $cgi->escapeHTML($@);
+    }
+}
+
+sub _handle_request {
+    my ( $self, $cgi ) = @_;
     $self->cgi($cgi);
+    $self->hostname( $cgi->virtual_host() );
     my $path = $cgi->path_info();
 
-    my ( $raw, $pauseid, $distvname, $filename );
+    my ( $raw, $download, $pauseid, $distvname, $filename );
     if ( $path =~ m{^/~} ) {
         ( undef, $pauseid, $distvname, $filename ) = split( '/', $path, 4 );
         $pauseid =~ s{^~}{};
-    } elsif ( $path =~ m{^/raw/~} ) {
+    } elsif ( $path =~ m{^/(raw|download)/~} ) {
         ( undef, undef, $pauseid, $distvname, $filename )
             = split( '/', $path, 5 );
-        $raw = 1;
+        ( $1 eq 'raw' ? $raw : $download ) = 1;
         $pauseid =~ s{^~}{};
     }
     $self->pauseid($pauseid);
     $self->distvname($distvname);
     $self->filename($filename);
 
-    #warn "$raw / $pauseid / $distvname / $filename";
+    #warn "$raw / $download / $pauseid / $distvname / $filename";
 
     if ( $path eq '/' ) {
         $self->index_page();
@@ -88,6 +148,8 @@ sub handle_request {
         $self->search_page();
     } elsif ( $raw && $pauseid && $distvname && $filename ) {
         $self->raw_page();
+    } elsif ( $download && $pauseid && $distvname ) {
+        $self->download_file();
     } elsif ( $pauseid && $distvname && $filename ) {
         $self->file_page();
     } elsif ( $pauseid && $distvname ) {
@@ -185,6 +247,14 @@ sub author_page {
         $self->parse_cpan_packages->distributions;
     my $author = $self->parse_cpan_authors->author( uc $pauseid );
 
+    my $cksum = $self->checksum_data_for_author( uc $pauseid );
+    my %dates;
+    if ( not $@ and defined $cksum ) {
+        foreach my $dist (@distributions) {
+            $dates{ $dist->distvname } = $cksum->{ $dist->filename }->{mtime};
+        }
+    }
+
     print "HTTP/1.0 200 OK\r\n";
     print $cgi->header;
     print Template::Declare->show(
@@ -192,6 +262,7 @@ sub author_page {
         {   author        => $author,
             pauseid       => $pauseid,
             distributions => \@distributions,
+            dates         => \%dates,
         }
     );
 }
@@ -206,6 +277,18 @@ sub distribution_page {
         = grep { $_->cpanid eq uc $pauseid && $_->distvname eq $distvname }
         $self->parse_cpan_packages->distributions;
 
+    my $filename = $distribution->distvname . "/META.yml";
+    my $metastr  = $self->get_file_from_tarball( $distribution, $filename );
+    my $meta     = {};
+    my @yaml     = eval { Parse::CPAN::Meta::Load($metastr); };
+    if ( not $@ ) {
+        $meta = $yaml[0];
+    }
+
+    my $cksum_data = $self->checksum_data_for_author( uc $pauseid );
+    $meta->{'release date'}
+        = $cksum_data->{ $distribution->filename }->{mtime};
+
     my @filenames = $self->list_files($distribution);
 
     print "HTTP/1.0 200 OK\r\n";
@@ -216,7 +299,9 @@ sub distribution_page {
             distribution => $distribution,
             pauseid      => $pauseid,
             distvname    => $distvname,
-            filenames    => \@filenames
+            filenames    => \@filenames,
+            meta         => $meta,
+            pcp          => $self->parse_cpan_packages,
         }
     );
 }
@@ -247,20 +332,12 @@ sub file_page {
         = grep { $_->cpanid eq uc $pauseid && $_->distvname eq $distvname }
         $self->parse_cpan_packages->distributions;
 
-    my $file
-        = file( $self->directory, 'authors', 'id', $distribution->prefix );
-
-    my $contents;
-    if ( $file =~ /\.(?:tar\.gz|tgz)$/ ) {
-
-        # warn "tar fzxO $file $filename";
-        $contents = `tar fzxO $file $filename`;
-    } else {
-        die "Unknown distribution format $file";
-    }
+    my $contents = $self->get_file_from_tarball( $distribution, $filename );
 
     my $parser = Pod::Simple::HTML->new;
-    $parser->perldoc_url_prefix('http://localhost:2963/perldoc?');
+    my $port   = $self->port;
+    my $host   = $self->hostname;
+    $parser->perldoc_url_prefix("http://$host:$port/perldoc?");
     $parser->index(0);
     $parser->no_whining(1);
     $parser->no_errata_section(1);
@@ -285,6 +362,53 @@ sub file_page {
             html         => $html,
         }
     );
+}
+
+sub download_file {
+    my $self      = shift;
+    my $cgi       = $self->cgi;
+    my $pauseid   = $self->pauseid;
+    my $distvname = $self->distvname;
+    my $filename  = $self->filename;
+
+    my ($distribution)
+        = grep { $_->cpanid eq uc $pauseid && $_->distvname eq $distvname }
+        $self->parse_cpan_packages->distributions;
+
+    my $file
+        = file( $self->directory, 'authors', 'id', $distribution->prefix );
+
+    if ($filename) {
+        my $contents;
+        if ( $file =~ /\.(?:tar\.gz|tgz)$/ ) {
+            $contents = `tar fzxO $file $filename`;
+        } else {
+            die "Unknown distribution format $file";
+        }
+        print "HTTP/1.0 200 OK\r\n";
+        print $cgi->header(
+            -content_type   => 'text/plain',
+            -content_length => length $contents,
+        );
+        print $contents;
+    } else {
+        open my $fh, $file or do {
+            print "HTTP/1.0 404 Not Found\r\n", $cgi->header, "Not Found";
+            return;
+        };
+
+        print "HTTP/1.0 200 OK\r\n";
+        my $content_type
+            = $file =~ /zip/ ? 'application/zip' : 'application/x-gzip';
+        print $cgi->header(
+            -content_type        => $content_type,
+            -content_disposition => "attachment; filename=" . $file->basename,
+            -content_length      => -s $fh,
+        );
+        while (<$fh>) {
+            print;
+        }
+    }
 }
 
 sub raw_page {
@@ -332,9 +456,11 @@ sub raw_page {
         $_ =~ s{<br>}{}g foreach @lines;
 
         # link module names to search.cpan.org
+        my $port = $self->port;
+        my $host = $self->hostname;
         @lines = map {
             $_
-                =~ s{<span class="word">([^<]+?::[^<]+?)</span>}{<span class="word"><a href="http://localhost:2963/perldoc?$1">$1</a></span>};
+                =~ s{<span class="word">([^<]+?::[^<]+?)</span>}{<span class="word"><a href="http://$host:$port/perldoc?$1">$1</a></span>};
             $_;
         } @lines;
         $html = join '', @lines;
@@ -374,7 +500,9 @@ sub package_page {
     $postfix .= '.pm';
     my ($filename) = grep { $_ =~ /$postfix$/ }
         sort { length($a) <=> length($b) } @filenames;
-    my $url = "http://localhost:2963/~$pauseid/$distvname/$filename";
+    my $port = $self->port;
+    my $host = $self->hostname;
+    my $url  = "http://$host:$port/~$pauseid/$distvname/$filename";
 
     print "HTTP/1.0 302 OK\r\n";
     print $cgi->redirect($url);

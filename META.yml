@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                CPAN-Mini-Webserver
-version:             0.36
+version:             0.37
 abstract:            ~
 license:             perl
 author:              
@@ -9,6 +9,7 @@ generated_by:        ExtUtils::MakeMaker version 6.44
 distribution_type:   module
 requires:     
     App::Cache:                    0
+    CGI:                           3.16
     Convert::UU:                   0
     CPAN::Mini:                    0.565
     HTTP::Server::Simple:          0.34
@@ -16,6 +17,7 @@ requires:
     List::MoreUtils:               0
     Moose:                         0
     Parse::CPAN::Authors:          0
+    Parse::CPAN::Meta:             0
     Parse::CPAN::Packages:         0
     Path::Class:                   0
     Perl6::Say:                    0
@@ -24,7 +26,6 @@ requires:
     PPI::HTML:                     0
     Search::QueryParser:           0
     Template::Declare:             0.29
-    Term::ProgressBar::Quiet:      0
     Test::More:                    0
 meta-spec:
     url:     http://module-build.sourceforge.net/META-spec-v1.3.html

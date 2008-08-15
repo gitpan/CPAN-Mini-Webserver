@@ -1,5 +1,16 @@
 Revision history for Perl module CPAN::Mini::Webserver:
 
+0.37 Fri Aug 15 09:37:46 CEST 2008
+     - show metadata on distribution pages (patch by martijn)
+     - port can now be configured with --port command line option 
+       (thanks to tokuhirom, miyagawa, martijn)
+     - does Bonjour publishing if HTTP::Server::Simple::Bonjour is
+       installed (miyagawa)
+     - added /download links to individual files and tarballs
+       (thanks to miyagawa)
+     - highlight perl files in lib, t and hide files in inc
+       (thanks to tokuhirom)
+
 0.36 Thu Aug 14 16:20:53 CEST 2008
      - improve searching, you can now search for "buffy -test"
      - make links to modules in the pod and source point back
