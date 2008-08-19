@@ -4,6 +4,7 @@ use CPAN::Mini::App;
 use CPAN::Mini::Webserver::Index;
 use CPAN::Mini::Webserver::Templates;
 use List::MoreUtils qw(uniq);
+use Module::InstalledVersion;
 use Moose;
 use Parse::CPAN::Authors;
 use Parse::CPAN::Packages;
@@ -33,7 +34,7 @@ has 'distvname'           => ( is => 'rw' );
 has 'filename'            => ( is => 'rw' );
 has 'index' => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' );
 
-our $VERSION = '0.38';
+our $VERSION = '0.39';
 
 sub service_name {
     "$ENV{USER}'s minicpan_webserver";
@@ -49,7 +50,19 @@ sub get_file_from_tarball {
         unless ( $file =~ /\.(?:tar\.gz|tgz)$/ );
 
     # warn "tar fzxO $file $filename";
-    my $contents = `tar fzxO $file $filename`;
+    #my $contents = `tar fzxO $file $filename`;
+    my $contents;
+    if ( eval { require Archive::Tar; 1 } ) {
+        my $ar = Archive::Tar->new("$file");
+        $contents = $ar->get_content($filename);
+    } else {
+
+        # Use the system built-in tar (hopefully)
+        # This one hopefully understands -z
+        # and CPAN filenames contain hopefully no weird characters
+        # warn "tar fzxO $file $filename";
+        $contents = `tar fzxO $file $filename`;
+    }
     return $contents;
 }
 
@@ -110,6 +123,15 @@ sub after_setup_listener {
     $index->create_index( $parse_cpan_authors, $parse_cpan_packages );
 }
 
+sub print_banner {
+    my $self = shift;
+
+    print(    "CPAN:Mini::Webserver is ready for your queries at "
+            . "http://localhost:"
+            . $self->port
+            . "/\n" );
+}
+
 sub handle_request {
     my ( $self, $cgi ) = @_;
     eval { $self->_handle_request($cgi) };
@@ -125,14 +147,19 @@ sub _handle_request {
     $self->hostname( $cgi->virtual_host() );
     my $path = $cgi->path_info();
 
-    my ( $raw, $download, $pauseid, $distvname, $filename );
+    # $raw, $download and $install should become $action?
+    my ( $raw, $install, $download, $pauseid, $distvname, $filename );
     if ( $path =~ m{^/~} ) {
         ( undef, $pauseid, $distvname, $filename ) = split( '/', $path, 4 );
         $pauseid =~ s{^~}{};
-    } elsif ( $path =~ m{^/(raw|download)/~} ) {
+    } elsif ( $path =~ m{^/(raw|download|install)/~} ) {
         ( undef, undef, $pauseid, $distvname, $filename )
             = split( '/', $path, 5 );
-        ( $1 eq 'raw' ? $raw : $download ) = 1;
+
+        (     $1 eq 'raw'     ? $raw
+            : $1 eq 'install' ? $install
+            : $download
+        ) = 1;
         $pauseid =~ s{^~}{};
     }
     $self->pauseid($pauseid);
@@ -147,6 +174,8 @@ sub _handle_request {
         $self->search_page();
     } elsif ( $raw && $pauseid && $distvname && $filename ) {
         $self->raw_page();
+    } elsif ( $install && $pauseid && $distvname && $filename ) {
+        $self->install_page();
     } elsif ( $download && $pauseid && $distvname ) {
         $self->download_file();
     } elsif ( $pauseid && $distvname && $filename ) {
@@ -157,6 +186,8 @@ sub _handle_request {
         $self->author_page();
     } elsif ( $path =~ m{^/perldoc} ) {
         $self->pod_page();
+    } elsif ( $path =~ m{^/dist/} ) {
+        $self->dist_page();
     } elsif ( $path =~ m{^/package/} ) {
         $self->package_page();
     } elsif ( $path eq '/static/css/screen.css' ) {
@@ -174,13 +205,35 @@ sub _handle_request {
     } elsif ( $path eq '/static/xml/opensearch.xml' ) {
         $self->opensearch_page();
     } else {
-        print "HTTP/1.0 404 Not found\r\n";
-        print $cgi->header,
-            $cgi->start_html('Not found'),
-            $cgi->h1('Not found'),
-            $cgi->h2( 'path: ' . $path ),
-            $cgi->end_html;
+        my ($q) = $path =~ m'/(.*?)/?$';
+        $self->not_found_page($q);
     }
+
+}
+
+sub not_found_page {
+    my $self = shift;
+    my $q    = shift;
+    my ( $authors, $dists, $packages ) = $self->_do_search($q);
+    print "HTTP/1.0 200 OK\r\n";
+    print $self->cgi->header;
+    print Template::Declare->show(
+        '404',
+        {   parse_cpan_authors => $self->parse_cpan_authors,
+            q                  => $q,
+            authors            => $authors,
+            distributions      => $dists,
+            packages           => $packages
+        }
+    );
+}
+
+sub redirect {
+    my $self = shift;
+    my $url  = shift;
+    print "HTTP/1.0 302 OK\r\n";
+    print $self->cgi->redirect($url);
+
 }
 
 sub index_page {
@@ -197,15 +250,40 @@ sub search_page {
     my $cgi  = $self->cgi;
     my $q    = $cgi->param('q');
 
+    my ( $authors, $dists, $packages ) = $self->_do_search($q);
+    print "HTTP/1.0 200 OK\r\n";
+    print $cgi->header;
+    print Template::Declare->show(
+        'search',
+        {   parse_cpan_authors => $self->parse_cpan_authors,
+            q                  => $q,
+            authors            => $authors,
+            distributions      => $dists,
+            packages           => $packages
+        }
+    );
+}
+
+sub _do_search {
+    my $self    = shift;
+    my $q       = shift;
     my $index   = $self->index;
     my @results = $index->search($q);
-    my @authors
-        = uniq grep { ref($_) eq 'Parse::CPAN::Authors::Author' } @results;
-    my @distributions
-        = uniq grep { ref($_) eq 'Parse::CPAN::Packages::Distribution' }
-        @results;
-    my @packages
-        = uniq grep { ref($_) eq 'Parse::CPAN::Packages::Package' } @results;
+    my ( @authors, @distributions, @packages );
+
+    if ( $q !~ /(?:::|-)/ ) {
+        @authors = uniq grep { ref($_) eq 'Parse::CPAN::Authors::Author' }
+            @results;
+    }
+    if ( $q !~ /::/ ) {
+        @distributions
+            = uniq grep { ref($_) eq 'Parse::CPAN::Packages::Distribution' }
+            @results;
+    }
+    if ( $q !~ /-/ ) {
+        @packages = uniq grep { ref($_) eq 'Parse::CPAN::Packages::Package' }
+            @results;
+    }
 
     @authors = sort { $a->name cmp $b->name } @authors;
 
@@ -223,17 +301,8 @@ sub search_page {
             || $a->package cmp $b->package
     } @packages;
 
-    print "HTTP/1.0 200 OK\r\n";
-    print $cgi->header;
-    print Template::Declare->show(
-        'search',
-        {   parse_cpan_authors => $self->parse_cpan_authors,
-            q                  => $q,
-            authors            => \@authors,
-            distributions      => \@distributions,
-            packages           => \@packages,
-        }
-    );
+    return ( \@authors, \@distributions, \@packages );
+
 }
 
 sub author_page {
@@ -316,8 +385,34 @@ sub pod_page {
     my ( $pauseid, $distvname ) = ( $d->cpanid, $d->distvname );
     my $url = "/package/$pauseid/$distvname/$pkgname/";
 
-    print "HTTP/1.0 302 OK\r\n";
-    print $cgi->redirect($url);
+    $self->redirect($url);
+}
+
+sub install_page {
+    my $self      = shift;
+    my $cgi       = $self->cgi;
+    my $pauseid   = $self->pauseid;
+    my $distvname = $self->distvname;
+
+    my ($distribution)
+        = grep { $_->cpanid eq uc $pauseid && $_->distvname eq $distvname }
+        $self->parse_cpan_packages->distributions;
+
+    my $file
+        = file( $self->directory, 'authors', 'id', $distribution->prefix );
+
+    print "HTTP/1.0 200 OK\r\n";
+    print $cgi->header;
+    printf '<html><body><h1>Installing %s</h1><pre>',
+        $distribution->distvname;
+
+    warn sprintf "Installing '%s'\n", $distribution->prefix;
+
+    require CPAN;    # loads CPAN::Shell
+    CPAN::Shell->install( $distribution->prefix );
+
+    printf '</pre><a href="/~%s/%s">Go back</a></body></html>',
+        $self->pauseid, $self->distvname;
 }
 
 sub file_page {
@@ -378,12 +473,8 @@ sub download_file {
         = file( $self->directory, 'authors', 'id', $distribution->prefix );
 
     if ($filename) {
-        my $contents;
-        if ( $file =~ /\.(?:tar\.gz|tgz)$/ ) {
-            $contents = `tar fzxO $file $filename`;
-        } else {
-            die "Unknown distribution format $file";
-        }
+        my $contents
+            = $self->get_file_from_tarball( $distribution, $filename );
         print "HTTP/1.0 200 OK\r\n";
         print $cgi->header(
             -content_type   => 'text/plain',
@@ -391,10 +482,7 @@ sub download_file {
         );
         print $contents;
     } else {
-        open my $fh, $file or do {
-            print "HTTP/1.0 404 Not Found\r\n", $cgi->header, "Not Found";
-            return;
-        };
+        open my $fh, $file or return $self->not_found_page( $self->filename );
 
         print "HTTP/1.0 200 OK\r\n";
         my $content_type
@@ -424,14 +512,7 @@ sub raw_page {
     my $file
         = file( $self->directory, 'authors', 'id', $distribution->prefix );
 
-    my $contents;
-    if ( $file =~ /\.(?:tar\.gz|tgz)$/ ) {
-
-        # warn "tar fzxO $file $filename";
-        $contents = `tar fzxO $file $filename`;
-    } else {
-        die "Unknown distribution format $file";
-    }
+    my $contents = $self->get_file_from_tarball( $distribution, $filename );
 
     my $html;
 
@@ -480,6 +561,17 @@ sub raw_page {
     );
 }
 
+sub dist_page {
+    my $self = shift;
+    my ($dist) = $self->cgi->path_info =~ m{^/dist/(.+?)$};
+    my $latest = $self->parse_cpan_packages->latest_distribution($dist);
+    if ($latest) {
+        $self->redirect( "/~" . $latest->cpanid . "/" . $latest->distvname );
+    } else {
+        $self->not_found_page($dist);
+    }
+}
+
 sub package_page {
     my $self = shift;
     my $cgi  = $self->cgi;
@@ -503,8 +595,7 @@ sub package_page {
     my $host = $self->hostname;
     my $url  = "http://$host:$port/~$pauseid/$distvname/$filename";
 
-    print "HTTP/1.0 302 OK\r\n";
-    print $cgi->redirect($url);
+    $self->redirect($url);
 }
 
 sub list_files {
@@ -516,8 +607,13 @@ sub list_files {
     if ( $file =~ /\.(?:tar\.gz|tgz)$/ ) {
 
         # warn "tar fzt $file";
-        @filenames = sort `tar fzt $file`;
-        chomp @filenames;
+        if ( eval { require Archive::Tar; 1 } ) {
+            my $ar = Archive::Tar->new("$file");
+            @filenames = sort $ar->list_files();
+        } else {
+            @filenames = sort `tar fzt $file`;
+            chomp @filenames;
+        }
         @filenames = grep { $_ !~ m{/$} } @filenames;
     } else {
         die "Unknown distribution format $file";
