@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                CPAN-Mini-Webserver
-version:             0.39
+version:             0.40
 abstract:            ~
 license:             perl
 author:              
@@ -11,6 +11,7 @@ requires:
     App::Cache:                    0
     CGI:                           3.16
     CPAN::Mini:                    0.565
+    File::Type:                    0
     HTTP::Server::Simple:          0.34
     IO::Capture::Stdout:           0
     List::MoreUtils:               0
@@ -20,12 +21,14 @@ requires:
     Parse::CPAN::Authors:          0
     Parse::CPAN::Meta:             0
     Parse::CPAN::Packages:         2.28
+    Parse::CPAN::Whois:            0.02
     Path::Class:                   0
     Perl6::Say:                    0
     Pod::Simple::HTML:             0
     PPI:                           0
     PPI::HTML:                     0
     Search::QueryParser:           0
+    String::CamelCase:             0
     Template::Declare:             0.29
     Test::More:                    0
 meta-spec:

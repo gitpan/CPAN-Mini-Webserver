@@ -1,95 +1,121 @@
 #!perl
 use strict;
 use warnings;
-use CGI;
-use IO::Capture::Stdout;
+use utf8;
+
 use Test::More;
+
+use FindBin;
+use lib $FindBin::Bin;
+use WebserverTester;
+
 use CPAN::Mini::Webserver;
 
+my $name;
 eval {
-    my $server = CPAN::Mini::Webserver->new();
+    my $server = CPAN::Mini::Webserver->new(2963);
     $server->after_setup_listener;
+    if ( $server->author_type eq 'Whois' ) {
+        $name = 'Léon Brocard';
+    } else {
+        $name = 'Leon Brocard';
+    }
 };
+
 if ( $@ =~ /Please set up minicpan/ ) {
     plan skip_all => "CPAN::Mini mirror must be installed for testing: $@";
 } else {
-    plan tests => 21;
+    plan tests => 47;
 }
 
-my $capture = IO::Capture::Stdout->new();
-
-my $server = CPAN::Mini::Webserver->new(2963);
-$server->after_setup_listener;
+setup_server();
+my $html;
 
 # index
-my $cgi = CGI->new;
-$cgi->path_info('/');
-my $html = make_request();
+$html = html_page_ok('/');
 like( $html, qr/Index/ );
 like( $html, qr/Welcome to CPAN::Mini::Webserver/ );
 
+# search for nothing
+$html = html_page_ok( '/search/', q => '' );
+like( $html, qr/No results found./ );
+
 # search for buffy
-$cgi->path_info('/search/');
-$cgi->param( 'q', 'buffy' );
-$html = make_request();
+$html = html_page_ok( '/search/', q => "buffy" );
 like( $html, qr/Search for .buffy./ );
 like( $html, qr/Acme-Buffy-1.5/ );
-like( $html, qr/Leon Brocard/ );
+like( $html, qr/$name/ );
 
 # show Leon
-$cgi->path_info('~lbrocard/');
-$cgi->param( 'q', undef );
-$html = make_request();
-like( $html, qr/Leon Brocard/ );
+$html = html_page_ok( '~lbrocard/', 'q' => undef );
+like( $html, qr/$name/ );
 like( $html, qr/Acme-Buffy-1.5/ );
 like( $html, qr/Tie-GHash-0.12/ );
 
 # Show Acme-Buffy-1.5
-$cgi->path_info('~lbrocard/Acme-Buffy-1.5/');
-$html = make_request();
-like( $html, qr/Leon Brocard &gt; Acme-Buffy-1.5/ );
+$html = html_page_ok('~lbrocard/Acme-Buffy-1.5/');
+like( $html, qr/$name &gt; Acme-Buffy-1.5/ );
 like( $html, qr/CHANGES/ );
 like( $html, qr/demo_buffy\.pl/ );
 
 # Show Acme-Buffy-1.5 CHANGES
-$cgi->path_info('~lbrocard/Acme-Buffy-1.5/Acme-Buffy-1.5/CHANGES');
-$html = make_request();
-like( $html,
-    qr{Leon Brocard &gt; Acme-Buffy-1.5 &gt; Acme-Buffy-1.5/CHANGES} );
+$html = html_page_ok('~lbrocard/Acme-Buffy-1.5/Acme-Buffy-1.5/CHANGES');
+like( $html, qr{$name &gt; Acme-Buffy-1.5 &gt; Acme-Buffy-1.5/CHANGES} );
 like( $html, qr/Revision history for Perl extension Buffy/ );
 
 # Show Acme-Buffy-1.5 CHANGES Buffy.pm
-$cgi->path_info('~lbrocard/Acme-Buffy-1.5/Acme-Buffy-1.5/lib/Acme/Buffy.pm');
-$html = make_request();
+$html = html_page_ok(
+    '~lbrocard/Acme-Buffy-1.5/Acme-Buffy-1.5/lib/Acme/Buffy.pm');
 like( $html,
-    qr{Leon Brocard &gt; Acme-Buffy-1.5 &gt; Acme-Buffy-1.5/lib/Acme/Buffy.pm}
-);
+    qr{$name &gt; Acme-Buffy-1.5 &gt; Acme-Buffy-1.5/lib/Acme/Buffy.pm} );
 like( $html, qr{An encoding scheme for Buffy the Vampire Slayer fans} );
 like( $html, qr{See raw file} );
 
 # Show Acme-Buffy-1.5 CHANGES Buffy.pm
-$cgi->path_info(
+$html = html_page_ok(
     '/raw/~lbrocard/Acme-Buffy-1.5/Acme-Buffy-1.5/lib/Acme/Buffy.pm');
-$html = make_request();
 like( $html,
-    qr{Leon Brocard &gt; Acme-Buffy-1.5 &gt; Acme-Buffy-1.5/lib/Acme/Buffy.pm}
-);
+    qr{$name &gt; Acme-Buffy-1.5 &gt; Acme-Buffy-1.5/lib/Acme/Buffy.pm} );
 like( $html, qr{An encoding scheme for Buffy the Vampire Slayer fans} );
 
 # Show package Acme::Buffy.pm
-$cgi->path_info('/package/lbrocard/Acme-Buffy-1.5/Acme::Buffy/');
-$html = make_request();
-like( $html, qr{HTTP/1.0 302 OK} );
-like( $html, qr{Status: 302 Found} );
-like( $html,
-    qr{Location: http://localhost:2963/~lbrocard/Acme-Buffy-1.5/Acme-Buffy-1.5/lib/Acme/Buffy.pm}
+redirect_ok(
+    'http://localhost:2963/~lbrocard/Acme-Buffy-1.5/Acme-Buffy-1.5/lib/Acme/Buffy.pm',
+    '/package/lbrocard/Acme-Buffy-1.5/Acme::Buffy/'
 );
 
-sub make_request {
-    $capture->start;
-    $server->handle_request($cgi);
-    $capture->stop;
-    my $buffer = join '', $capture->read;
-    return $buffer;
-}
+# 'static' files
+css_ok('/static/css/screen.css');
+css_ok('/static/css/print.css');
+css_ok('/static/css/ie.css');
+png_ok('/static/images/logo.png');
+png_ok('/static/images/favicon.png');
+png_ok('favicon.ico');
+opensearch_ok('/static/xml/opensearch.xml');
 
+# 404
+error404_ok('/this/doesnt/exist');
+
+# downloads
+$html
+    = download_ok('/download/~LBROCARD/Acme-Buffy-1.5/Acme-Buffy-1.5/README');
+like( $html, qr{Copyright \(c\) 2001} );
+
+redirect_ok(
+    '/authors/id/L/LB/LBROCARD/Acme-Buffy-1.5.tar.gz',
+    '/download/~LBROCARD/Acme-Buffy-1.5',
+);
+
+# be like a CPAN mirror
+$html = download_gzip_ok('/authors/id/L/LB/LBROCARD/Acme-Buffy-1.5.tar.gz');
+
+$html = download_gzip_ok('/modules/02packages.details.txt.gz');
+like( $html, qr{^\037\213} );
+
+$html = download_gzip_ok('/authors/01mailrc.txt.gz');
+like( $html, qr{^\037\213} );
+
+$html = download_ok('/authors/id/L/LB/LBROCARD/CHECKSUMS');
+like( $html, qr{this PGP-signed message is also valid perl} );
+
+error404_ok('/authors/id/L/LB/LBROCARD/CHECKSUMZ');

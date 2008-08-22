@@ -274,6 +274,56 @@ template 'search' => sub {
     };
 };
 
+private template 'authorinfo' => sub {
+    my ( $self, $author ) = @_;
+
+    my $pauseid = $author->pauseid;
+    my $email   = $author->email;
+    my $url     = $author->can('homepage') ? $author->homepage : undef;
+    my $prefix
+        = 'id' . '/'
+        . substr( $pauseid, 0, 1 ) . '/'
+        . substr( $pauseid, 0, 2 ) . '/'
+        . $pauseid;
+
+    h2 {"Links"};
+    ul {
+        li {
+            a {
+                attr { href => "http://backpan.perl.org/authors/$prefix" };
+                'BackPAN';
+            };
+        }
+        li {
+            a {
+                attr { href => "mailto:$email" };
+                $email;
+            };
+        }
+        li {
+            a {
+                attr { href => $url };
+                $url;
+            };
+        }
+        li {
+            a {
+                attr {
+                    href => "http://cpantesters.perl.org/author/$pauseid.html" };
+                'CPANTesters';
+            };
+        }
+        li {
+            a {
+                attr { href =>
+                        "http://bbbike.radzeit.de/~slaven/cpantestersmatrix.cgi?author=$pauseid"
+                };
+                'Test Matrix';
+            };
+        }
+    }
+};
+
 template 'author' => sub {
     my ( $self, $arguments ) = @_;
     my $author        = $arguments->{author};
@@ -288,9 +338,12 @@ template 'author' => sub {
             div {
                 attr { class => 'container' };
                 div {
-                    attr { class => 'span-24' };
+                    attr { class => 'span-24 last' };
                     show('searchbar');
                     h1 { show( 'author_link', $author ) };
+                }
+                div {
+                    attr { class => 'span-18 last' };
                     outs_raw '<table>';
                     foreach my $distribution (@distributions) {
                         row {
@@ -304,6 +357,14 @@ template 'author' => sub {
                         };
                     }
                     outs_raw '</table>';
+                }
+                div {
+                    attr { class => 'span-6 last' };
+                    show( 'authorinfo', $author );
+                };
+
+                div {
+                    attr { class => 'span-24 last' };
                     show('footer');
                 };
 
@@ -533,7 +594,7 @@ template 'distribution' => sub {
 
                     #                    outs_raw '<table>';
                     my ( @code, @test, @other );
-                    while ( $_ = shift @filenames ) {
+                    foreach (@filenames) {
                         if ( m{(?:/bin/|\.p(?:m|l)$)} and not m{/inc/} ) {
                             push @code, $_;
                         } elsif (/\.t$/) {
@@ -1021,8 +1082,9 @@ hr {margin:-8px auto 11px;}
 };
 
 template 'images_logo' => sub {
-    my $self      = shift;
-    my $encoded = q|iVBORw0KGgoAAAANSUhEUgAAAFIAAAAYCAMAAABeMVqjAAAAAXNSR0IArs4c6QAAApFQTFRFAgIC
+    my $self = shift;
+    my $encoded
+        = q|iVBORw0KGgoAAAANSUhEUgAAAFIAAAAYCAMAAABeMVqjAAAAAXNSR0IArs4c6QAAApFQTFRFAgIC
 AwMDBAQEBQUFBgYGBwcHCAgICQkJCgoKCwsLDAwMDQ0NDg4ODw8PEBAQEREREhISExMTFBQUFRUV
 FhYWFxcXGBgYGRkZGhoaGxsbHh4eHx8fICAgISEhIiIiIyMjJCQkJSUlJiYmJycnKCgoKSkpKioq
 KysrLCwsLS0tLi4uLy8vMDAwMTExMjIyMzMzNTU1NjY2Nzc3ODg4OTk5Ojo6Ozs7PDw8PT09Pj4+
@@ -1058,8 +1120,9 @@ De7OZcRXFE3c7Jw8vLw83NxgglNEse4GhXXPzV1r5k1uLMlJigx0ttCRExXoxF1PAgA2yRjCqrg9
 };
 
 template 'images_favicon' => sub {
-    my $self      = shift;
-    my $encoded = q|iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAADNQTFRFOAAA
+    my $self = shift;
+    my $encoded
+        = q|iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAMAAAAoLQ9TAAAAAXNSR0IArs4c6QAAADNQTFRFOAAA
 BQgEFhgVHh8dISIgJigmLC0rMTMwOz06RkhFTE1LWFpXZWdkeHl3hIaDnqCdzM7LanH2cgAAAAF0
 Uk5TAEDm2GYAAABsSURBVBjTdY9ZDsIwDAW9rynt/U8LhRAVBO/HGnss2QB/csRXo3XrK+9u43NB
 bnIxjuEx1HJxG26ezIsVxQEUdbKgPm1BOUsxWr1cxocYtBiKMKBRK8PMIzKdzhnhOzzm5sq8xKW7
