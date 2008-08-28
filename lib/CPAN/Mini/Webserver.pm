@@ -1,5 +1,6 @@
 package CPAN::Mini::Webserver;
 use App::Cache;
+use Archive::Peek;
 use CPAN::Mini::App;
 use CPAN::Mini::Webserver::Index;
 use CPAN::Mini::Webserver::Templates;
@@ -38,7 +39,7 @@ has 'distvname'           => ( is => 'rw' );
 has 'filename'            => ( is => 'rw' );
 has 'index' => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' );
 
-our $VERSION = '0.40';
+our $VERSION = '0.41';
 
 sub service_name {
     "$ENV{USER}'s minicpan_webserver";
@@ -49,24 +50,8 @@ sub get_file_from_tarball {
 
     my $file
         = file( $self->directory, 'authors', 'id', $distribution->prefix );
-
-    die "unknown distribution format $file"
-        unless ( $file =~ /\.(?:tar\.gz|tgz)$/ );
-
-    # warn "tar fzxO $file $filename";
-    #my $contents = `tar fzxO $file $filename`;
-    my $contents;
-    if ( eval { require Archive::Tar; 1 } ) {
-        my $ar = Archive::Tar->new("$file");
-        $contents = $ar->get_content($filename);
-    } else {
-
-        # Use the system built-in tar (hopefully)
-        # This one hopefully understands -z
-        # and CPAN filenames contain hopefully no weird characters
-        # warn "tar fzxO $file $filename";
-        $contents = `tar fzxO $file $filename`;
-    }
+    my $peek = Archive::Peek->new( filename => $file );
+    my $contents = $peek->file($filename);
     return $contents;
 }
 
@@ -82,7 +67,7 @@ sub checksum_data_for_author {
 
     return unless -f $file;
 
-    my ( $content, $cksum );
+    my ( $content, $checksum );
     {
         local $/;
         open my $fh, "$file" or die "$file: $!";
@@ -92,7 +77,7 @@ sub checksum_data_for_author {
 
     eval $content;
 
-    return $cksum;
+    return $checksum;
 }
 
 sub send_http_header {
@@ -155,15 +140,6 @@ sub after_setup_listener {
     $index->create_index( $parse_cpan_authors, $parse_cpan_packages );
 }
 
-sub print_banner {
-    my $self = shift;
-
-    print(    "CPAN:Mini::Webserver is ready for your queries at "
-            . "http://localhost:"
-            . $self->port
-            . "/\n" );
-}
-
 sub handle_request {
     my ( $self, $cgi ) = @_;
     eval { $self->_handle_request($cgi) };
@@ -205,7 +181,7 @@ sub _handle_request {
     #warn "$raw / $download / $pauseid / $distvname / $filename";
 
     if ( $path eq '/' ) {
-        $self->index_page();
+        $self->direct_to_template("index");
     } elsif ( $path eq '/search/' ) {
         $self->search_page();
     } elsif ( $raw && $pauseid && $distvname && $filename ) {
@@ -229,19 +205,21 @@ sub _handle_request {
     } elsif ($prefix) {
         $self->download_cpan($prefix);
     } elsif ( $path eq '/static/css/screen.css' ) {
-        $self->css_screen_page();
+        $self->direct_to_template( "css_screen", "text/css" );
     } elsif ( $path eq '/static/css/print.css' ) {
-        $self->css_print_page();
+        $self->direct_to_template( "css_print", "text/css" );
     } elsif ( $path eq '/static/css/ie.css' ) {
-        $self->css_ie_page();
+        $self->direct_to_template( "css_ie", "text/css" );
     } elsif ( $path eq '/static/images/logo.png' ) {
-        $self->images_logo_page();
+        $self->direct_to_template( "images_logo", "image/png" );
     } elsif ( $path eq '/static/images/favicon.png' ) {
-        $self->images_favicon_page();
+        $self->direct_to_template( "images_favicon", "image/png" );
     } elsif ( $path eq '/favicon.ico' ) {
-        $self->images_favicon_page();
+        $self->direct_to_template( "images_favicon", "image/png" );
     } elsif ( $path eq '/static/xml/opensearch.xml' ) {
-        $self->opensearch_page();
+        $self->direct_to_template( "opensearch",
+            "application/opensearchdescription+xml",
+        );
     } else {
         my ($q) = $path =~ m'/(.*?)/?$';
         $self->not_found_page($q);
@@ -272,13 +250,6 @@ sub redirect {
     print "HTTP/1.0 302\015\012";
     print $self->cgi->redirect($url);
 
-}
-
-sub index_page {
-    my $self = shift;
-
-    $self->send_http_header( 200, -charset => 'utf-8' );
-    print Template::Declare->show('index');
 }
 
 sub search_page {
@@ -349,11 +320,12 @@ sub author_page {
         $self->parse_cpan_packages->distributions;
     my $author = $self->parse_cpan_authors->author( uc $pauseid );
 
-    my $cksum = $self->checksum_data_for_author( uc $pauseid );
+    my $checksum = $self->checksum_data_for_author( uc $pauseid );
     my %dates;
-    if ( not $@ and defined $cksum ) {
+    if ( not $@ and defined $checksum ) {
         foreach my $dist (@distributions) {
-            $dates{ $dist->distvname } = $cksum->{ $dist->filename }->{mtime};
+            $dates{ $dist->distvname }
+                = $checksum->{ $dist->filename }->{mtime};
         }
     }
 
@@ -385,9 +357,9 @@ sub distribution_page {
         $meta = $yaml[0];
     }
 
-    my $cksum_data = $self->checksum_data_for_author( uc $pauseid );
+    my $checksum_data = $self->checksum_data_for_author( uc $pauseid );
     $meta->{'release date'}
-        = $cksum_data->{ $distribution->filename }->{mtime};
+        = $checksum_data->{ $distribution->filename }->{mtime};
 
     my @filenames = $self->list_files($distribution);
 
@@ -546,7 +518,7 @@ sub raw_page {
         # remove newlines
         $_ =~ s{<br>}{}g foreach @lines;
 
-        # link module names to search.cpan.org
+        # link module names to ourselves
         my $port = $self->port;
         my $host = $self->hostname;
         @lines = map {
@@ -635,70 +607,23 @@ sub list_files {
     my ( $self, $distribution ) = @_;
     my $file
         = file( $self->directory, 'authors', 'id', $distribution->prefix );
-    my @filenames;
-
-    if ( $file =~ /\.(?:tar\.gz|tgz)$/ ) {
-
-        # warn "tar fzt $file";
-        if ( eval { require Archive::Tar; 1 } ) {
-            my $ar = Archive::Tar->new("$file");
-            @filenames = sort $ar->list_files();
-        } else {
-            @filenames = sort `tar fzt $file`;
-            chomp @filenames;
-        }
-        @filenames = grep { $_ !~ m{/$} } @filenames;
-    } else {
-        die "Unknown distribution format $file";
-    }
+    my $peek = Archive::Peek->new( filename => $file );
+    my @filenames = $peek->files;
+    return @filenames;
 }
 
-sub css_screen_page {
-    my $self = shift;
-
-    $self->send_http_header( 200, -type => 'text/css', -expires => '+1d' );
-    print Template::Declare->show('css_screen');
-}
-
-sub css_print_page {
-    my $self = shift;
-
-    $self->send_http_header( 200, -type => 'text/css', -expires => '+1d' );
-    print Template::Declare->show('css_print');
-}
-
-sub css_ie_page {
-    my $self = shift;
-    my $cgi  = $self->cgi;
-
-    $self->send_http_header( 200, -type => 'text/css', -expires => '+1d' );
-    print Template::Declare->show('css_ie');
-}
-
-sub images_logo_page {
-    my $self = shift;
-
-    $self->send_http_header( 200, -type => 'image/png', -expires => '+1d' );
-    print Template::Declare->show('images_logo');
-}
-
-sub images_favicon_page {
-    my $self = shift;
-
-    $self->send_http_header( 200, -type => 'image/png', -expires => '+1d' );
-    print Template::Declare->show('images_favicon');
-}
-
-sub opensearch_page {
-    my $self = shift;
-    my $cgi  = $self->cgi;
+sub direct_to_template {
+    my $self     = shift;
+    my $template = shift;
+    my $mime     = shift;
 
     $self->send_http_header(
         200,
-        -type    => 'application/opensearchdescription+xml',
-        -expires => '+1d'
+        -expires => '+1d',
+        ( $mime ? ( -type => $mime ) : () ),
     );
-    print Template::Declare->show('opensearch');
+
+    print Template::Declare->show($template);
 }
 
 1;

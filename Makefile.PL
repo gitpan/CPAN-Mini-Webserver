@@ -9,6 +9,7 @@ WriteMakefile(
     LICENSE      => 'perl',
     PREREQ_PM    => {
         'App::Cache'               => '0',
+        'Archive::Peek'            => '0.33',
         'CGI'                      => '3.16',
         'CPAN::Mini'               => '0.565',
         'File::Type'               => '0',
@@ -31,7 +32,6 @@ WriteMakefile(
         'String::CamelCase'        => '0',
         'Template::Declare'        => '0.29',
         'Test::More'               => '0',
-
     },
     'EXE_FILES' => ['bin/minicpan_webserver'],
 );

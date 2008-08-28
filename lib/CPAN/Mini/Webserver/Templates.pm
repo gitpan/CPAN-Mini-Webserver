@@ -100,7 +100,7 @@ private template distribution_file => sub {
         ? $1
         : $filename;
     my $href
-        = ( $filename =~ /\.(pm|PL|pod)$/ )
+        = ( $filename =~ /\.(pm|pod)$/ )
         ? "/~$pauseid/$distvname/$filename"
         : "/raw/~$pauseid/$distvname/$filename";
     row {
@@ -308,8 +308,8 @@ private template 'authorinfo' => sub {
         }
         li {
             a {
-                attr {
-                    href => "http://cpantesters.perl.org/author/$pauseid.html" };
+                attr { href =>
+                        "http://cpantesters.perl.org/author/$pauseid.html" };
                 'CPANTesters';
             };
         }
@@ -983,9 +983,8 @@ textarea {width:390px;height:250px;padding:5px;}
 .success a {color:#264409;}
 
 /* /home/acme/hg/CPAN-Mini-Webserver/root/static/css/my-screen.css */
-h1 {font-size:2em;clear:both;margin-top:10px;}
-h2 {font-size:1.7em;clear:both;}
-h3 {font-size:1.4em;clear:both;}
+h1 {font-size:1.5em;line-height:1;margin-bottom:1em;clear:both;}
+h2 {font-size:1.2em;line-height:1.25;margin-bottom:1.25em;height:1.25em;clear:both;}
 body {background:#ffffff;font-size:100%;font-family:Georgia, "Times New Roman", Times, serif;}
 pre, code, tt {font-size:80%;}
 td.searchbar {vertical-align:middle;}
