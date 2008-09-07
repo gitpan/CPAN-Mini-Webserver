@@ -593,20 +593,27 @@ template 'distribution' => sub {
                     attr { class => 'span-18 last' };
 
                     #                    outs_raw '<table>';
-                    my ( @code, @test, @other );
+                    my ( @code, @test, @other, @doc );
                     foreach (@filenames) {
                         if ( m{(?:/bin/|\.p(?:m|l)$)} and not m{/inc/} ) {
                             push @code, $_;
+                        } elsif (m{\.pod$}) {
+                            push @doc, $_;
                         } elsif (/\.t$/) {
                             push @test, $_;
                         } else {
                             push @other, $_;
                         }
                     }
-                    show( 'filelist', $pauseid, $distvname, 'Code',  \@code );
-                    show( 'filelist', $pauseid, $distvname, 'Tests', \@test );
-                    show( 'filelist', $pauseid, $distvname, 'Other',
-                        \@other );
+                    show( 'filelist', $pauseid, $distvname, 'Code', \@code )
+                        if @code;
+                    show( 'filelist', $pauseid, $distvname, 'Documentation',
+                        \@doc )
+                        if @doc;
+                    show( 'filelist', $pauseid, $distvname, 'Tests', \@test )
+                        if @test;
+                    show( 'filelist', $pauseid, $distvname, 'Other', \@other )
+                        if @other;
 
                    #                    foreach my $filename (@filenames) {
                    #                        show(
