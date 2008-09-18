@@ -39,7 +39,7 @@ has 'distvname'           => ( is => 'rw' );
 has 'filename'            => ( is => 'rw' );
 has 'index' => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' );
 
-our $VERSION = '0.42';
+our $VERSION = '0.43';
 
 sub service_name {
     "$ENV{USER}'s minicpan_webserver";
@@ -661,6 +661,8 @@ Leon Brocard <acme@astray.com>
 =head1 COPYRIGHT
 
 Copyright (C) 2008, Leon Brocard.
+
+=head1 LICENSE
 
 This module is free software; you can redistribute it or 
 modify it under the same terms as Perl itself.
