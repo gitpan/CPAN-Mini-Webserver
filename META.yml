@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                CPAN-Mini-Webserver
-version:             0.43
+version:             0.44
 abstract:            Search and browse Mini CPAN
 license:             perl
 author:              
@@ -32,6 +32,7 @@ requires:
     String::CamelCase:             0
     Template::Declare:             0.29
     Test::More:                    0
+    Text::Unidecode:               0
 meta-spec:
     url:     http://module-build.sourceforge.net/META-spec-v1.3.html
     version: 1.3

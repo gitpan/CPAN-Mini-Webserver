@@ -4,6 +4,9 @@ use Archive::Peek;
 use CPAN::Mini::App;
 use CPAN::Mini::Webserver::Index;
 use CPAN::Mini::Webserver::Templates;
+use CPAN::Mini::Webserver::Templates::CSS;
+use CPAN::Mini::Webserver::Templates::Images;
+use Encode;
 use File::Spec::Functions qw(canonpath);
 use File::Type;
 use List::MoreUtils qw(uniq);
@@ -19,7 +22,13 @@ use PPI;
 use PPI::HTML;
 use Template::Declare;
 
-Template::Declare->init( roots => ['CPAN::Mini::Webserver::Templates'] );
+Template::Declare->init(
+    roots => [
+        'CPAN::Mini::Webserver::Templates',
+        'CPAN::Mini::Webserver::Templates::CSS',
+        'CPAN::Mini::Webserver::Templates::Images',
+    ]
+);
 
 if ( eval { require HTTP::Server::Simple::Bonjour } ) {
     extends 'HTTP::Server::Simple::Bonjour', 'HTTP::Server::Simple::CGI';
@@ -39,7 +48,7 @@ has 'distvname'           => ( is => 'rw' );
 has 'filename'            => ( is => 'rw' );
 has 'index' => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' );
 
-our $VERSION = '0.43';
+our $VERSION = '0.44';
 
 sub service_name {
     "$ENV{USER}'s minicpan_webserver";
@@ -255,6 +264,7 @@ sub redirect {
 sub search_page {
     my $self = shift;
     my $q    = $self->cgi->param('q');
+    Encode::_utf8_on($q);    # we know that we have sent utf-8
 
     my ( $authors, $dists, $packages ) = $self->_do_search($q);
     $self->send_http_header( 200, -charset => 'utf-8' );
@@ -277,16 +287,16 @@ sub _do_search {
     my $au_type = $self->author_type;
     my ( @authors, @distributions, @packages );
 
-    if ( $q !~ /(?:::|-)/ ) {
+    if ( $q !~ /\w(?:::|-)\w/ ) {
         @authors = uniq grep { ref($_) eq "Parse::CPAN::${au_type}::Author" }
             @results;
     }
-    if ( $q !~ /::/ ) {
+    if ( $q !~ /\w::\w/ ) {
         @distributions
             = uniq grep { ref($_) eq 'Parse::CPAN::Packages::Distribution' }
             @results;
     }
-    if ( $q !~ /-/ ) {
+    if ( $q !~ /\w-\w/ ) {
         @packages = uniq grep { ref($_) eq 'Parse::CPAN::Packages::Package' }
             @results;
     }
