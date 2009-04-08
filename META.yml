@@ -1,6 +1,6 @@
 --- #YAML:1.0
 name:                CPAN-Mini-Webserver
-version:             0.44
+version:             0.45
 abstract:            Search and browse Mini CPAN
 license:             perl
 author:              
