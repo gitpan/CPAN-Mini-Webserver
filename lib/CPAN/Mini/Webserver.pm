@@ -48,7 +48,7 @@ has 'distvname'           => ( is => 'rw' );
 has 'filename'            => ( is => 'rw' );
 has 'index' => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' );
 
-our $VERSION = '0.46';
+our $VERSION = '0.47';
 
 sub service_name {
     "$ENV{USER}'s minicpan_webserver";
@@ -498,21 +498,18 @@ sub download_file {
     my ($distribution)
         = grep { $_->cpanid eq uc $pauseid && $_->distvname eq $distvname }
         $self->parse_cpan_packages->distributions;
-    my $prefix = file( '', 'authors', 'id', $distribution->prefix );
-    my $file = file( $self->directory, $prefix );
 
-    if ($filename) {
-        my $contents
-            = $self->get_file_from_tarball( $distribution, $filename );
-        $self->send_http_header(
-            200,
-            -content_type   => 'text/plain',
-            -content_length => length $contents,
-        );
-        print $contents;
-    } else {
-        return $self->redirect($prefix);
-    }
+    return $self->redirect( "/authors/id/" . $distribution->prefix ) if !$filename;
+
+    my $contents = $self->get_file_from_tarball( $distribution, $filename );
+    $self->send_http_header(
+        200,
+        -content_type   => 'text/plain',
+        -content_length => length $contents,
+    );
+    print $contents;
+
+    return;
 }
 
 sub raw_page {
@@ -666,13 +663,13 @@ CPAN::Mini::Webserver - Search and browse Mini CPAN
 =head1 SYNOPSIS
 
   % minicpan_webserver
-
+  
 =head1 DESCRIPTION
 
 This module is the driver that provides a web server that allows
 you to search and browse Mini CPAN. First you must install
 CPAN::Mini and create a local copy of CPAN using minicpan.
-Then you may run minicpan_webserver and search and
+Then you may run minicpan_webserver and search and 
 browse Mini CPAN at http://localhost:2963/.
 
 You may access the Subversion repository at:
@@ -693,5 +690,5 @@ Copyright (C) 2008, Leon Brocard.
 
 =head1 LICENSE
 
-This module is free software; you can redistribute it or
+This module is free software; you can redistribute it or 
 modify it under the same terms as Perl itself.
