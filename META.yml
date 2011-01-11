@@ -1,38 +1,45 @@
 --- #YAML:1.0
-name:                CPAN-Mini-Webserver
-version:             0.45
-abstract:            Search and browse Mini CPAN
-license:             perl
-author:              
+name:               CPAN-Mini-Webserver
+version:            0.46
+abstract:           Search and browse Mini CPAN
+author:
     - Leon Brocard <acme@astray.com>
-generated_by:        ExtUtils::MakeMaker version 6.44
-distribution_type:   module
-requires:     
-    App::Cache:                    0
-    Archive::Peek:                 0.33
-    CGI:                           3.16
-    CPAN::Mini:                    0.565
-    File::Type:                    0
-    HTTP::Server::Simple:          0.34
-    IO::Capture::Stdout:           0
-    List::MoreUtils:               0
-    MIME::Base64:                  0
-    Module::InstalledVersion:      0
-    Moose:                         0
-    Parse::CPAN::Authors:          0
-    Parse::CPAN::Meta:             0
-    Parse::CPAN::Packages:         2.28
-    Parse::CPAN::Whois:            0.02
-    Path::Class:                   0
-    Perl6::Say:                    0
-    Pod::Simple::HTML:             0
-    PPI:                           0
-    PPI::HTML:                     0
-    Search::QueryParser:           0
-    String::CamelCase:             0
-    Template::Declare:             0.29
-    Test::More:                    0
-    Text::Unidecode:               0
+license:            perl
+distribution_type:  module
+configure_requires:
+    ExtUtils::MakeMaker:  0
+build_requires:
+    ExtUtils::MakeMaker:  0
+requires:
+    App::Cache:           0
+    Archive::Peek:        0.33
+    CGI:                  3.16
+    CPAN::Mini:           0.565
+    File::Type:           0
+    HTTP::Server::Simple:  0.34
+    IO::Capture::Stdout:  0
+    List::MoreUtils:      0
+    MIME::Base64:         0
+    Module::InstalledVersion:  0
+    Moose:                0
+    Parse::CPAN::Authors:  0
+    Parse::CPAN::Meta:    0
+    Parse::CPAN::Packages:  2.28
+    Parse::CPAN::Whois:   0.02
+    Path::Class:          0
+    Pod::Simple::HTML:    0
+    PPI:                  0
+    PPI::HTML:            0
+    Search::QueryParser:  0
+    String::CamelCase:    0
+    Template::Declare:    0.29
+    Test::More:           0
+    Text::Unidecode:      0
+no_index:
+    directory:
+        - t
+        - inc
+generated_by:       ExtUtils::MakeMaker version 6.55_02
 meta-spec:
-    url:     http://module-build.sourceforge.net/META-spec-v1.3.html
-    version: 1.3
+    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
+    version:  1.4
