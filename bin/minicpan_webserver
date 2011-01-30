@@ -1,6 +1,7 @@
 #!perl
 use strict;
 use warnings;
+use lib '../lib';
 use lib 'lib';
 use CPAN::Mini::Webserver;
 use Getopt::Long;
@@ -8,8 +9,8 @@ use Getopt::Long;
 my $port = 2963;
 GetOptions( "port=i" => \$port, );
 
-my $server = CPAN::Mini::Webserver->new($port);
-$server->run();
+my $server = CPAN::Mini::Webserver->new( $port );
+$server->run;
 
 __END__
 
@@ -40,6 +41,10 @@ following line in your .minicpanrc:
 
   also_mirror: authors/00whois.xml
 
+=head1 CURRENT MAINTAINER
+
+Christian Walde <walde.christian@googlemail.com>
+
 =head1 AUTHOR
 
 Leon Brocard <acme@astray.com>
@@ -48,5 +53,5 @@ Leon Brocard <acme@astray.com>
 
 Copyright (C) 2008, Leon Brocard.
 
-This module is free software; you can redistribute it or 
+This module is free software; you can redistribute it or
 modify it under the same terms as Perl itself.
