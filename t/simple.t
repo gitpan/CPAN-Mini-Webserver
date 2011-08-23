@@ -2,22 +2,15 @@
 use strict;
 use warnings;
 
-BEGIN {
-    use Cwd;
-    chdir '..' if getcwd =~ m@/t$@;
-    use lib 'lib';
-    use lib 't';
-}
+use Test::InDistDir;
+use lib 't';
 
 use Test::More;
-use Compress::Zlib;
 use WebserverTester;
 use CPAN::Mini::Webserver;
-use File::Slurp qw( read_file write_file );
-use File::Path 'remove_tree';
 
-my $server = setup_test_minicpan();
-plan tests => 47;
+my $server = setup_test_minicpan( "t/mini" );
+plan tests => 51;
 
 my $name =
   ( $server->author_type eq 'Whois' )
@@ -111,17 +104,8 @@ like( $html, qr{this PGP-signed message is also valid perl} );
 
 error404_ok( "/authors/id/$cpan_id_path/$cpan_id_upper/CHECKSUMZ" );
 
-sub setup_test_minicpan {
-    $ENV{CPAN_MINI_CONFIG} = 't/mini/.minicpanrc';
-    remove_tree( "t/mini/cache" );
+$html = download_ok( "/download/~MELEZHIK/AMZ_TEST-0.0.2/AMZ_TEST-v0.0.3/lib/AMZ/Test.pm" );
+like $html, qr/тестируем документацию/, 'utf8 text in file downloads survives undamaged';
 
-    for my $file ( qw( t/mini/authors/01mailrc.txt t/mini/modules/02packages.details.txt ) ) {
-        my $gz_file = "$file.gz";
-        unlink $gz_file if -e $gz_file;
-        my $gz = Compress::Zlib::memGzip( read_file( $file, binmode => ':raw' ) ) or die "Cannot compress $file: $gzerrno\n";
-        write_file( $gz_file, { binmode => ':raw' }, $gz );
-    }
-
-    my $server = setup_server();
-    return $server;
-}
+my $res = error500_ok( "/download/~MELEZHIK/AMZ_TEST-v0.0.3/AMZ_TEST-v0.0.3/lib/AMZ/Test.pm" );
+like( $res->content, qr|\QDistribution &#39;AMZ_TEST-v0.0.3&#39; unknown for PAUSE id &#39;MELEZHIK&#39;.\E| );

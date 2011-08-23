@@ -45,7 +45,7 @@ has 'distvname'           => ( is => 'rw' );
 has 'filename'            => ( is => 'rw' );
 has 'index'               => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' );
 
-our $VERSION = '0.51';
+our $VERSION = '0.52';
 
 sub service_name {
     "$ENV{USER}'s minicpan_webserver";
@@ -153,6 +153,8 @@ sub handle_request {
         return "<h1>Internal Server Error</h1>", $cgi->escapeHTML( $_ );
     };
     print $result;
+
+    binmode STDOUT;
 
     return;
 }
@@ -481,14 +483,16 @@ sub download_file {
     my $filename  = $self->filename;
 
     my ( $distribution ) = grep { $_->cpanid eq uc $pauseid && $_->distvname eq $distvname } $self->parse_cpan_packages->distributions;
+    die "Distribution '$distvname' unknown for PAUSE id '$pauseid'." if !$distribution;
 
     return $self->redirect( "/authors/id/" . $distribution->prefix ) if !$filename;
 
     my $contents = $self->get_file_from_tarball( $distribution, $filename );
     $self->send_http_header(
         200,
-        -content_type   => 'text/plain',
+        -type   => 'text/plain',
         -content_length => length $contents,
+        -charset => '',
     );
 
     return $contents;
@@ -603,9 +607,10 @@ sub download_cpan {
 
     $self->send_http_header(
         200,
-        -content_type        => $content_type,
+        -type        => $content_type,
         -content_disposition => "attachment; filename=" . $file->basename,
         -content_length      => -s $fh,
+        -charset => '',
     );
     while ( <$fh> ) {
         print;
@@ -650,11 +655,10 @@ CPAN::Mini::Webserver - Search and browse Mini CPAN
 
 =head1 DESCRIPTION
 
-This module is the driver that provides a web server that allows
-you to search and browse Mini CPAN. First you must install
-CPAN::Mini and create a local copy of CPAN using minicpan.
-Then you may run minicpan_webserver and search and
-browse Mini CPAN at http://localhost:2963/.
+This module is the driver that provides a web server that allows you to search
+and browse Mini CPAN. See L<minicpan_webserver> for details on its use.
+
+=head1 SUPPORT
 
 You may access the Git repository at:
 

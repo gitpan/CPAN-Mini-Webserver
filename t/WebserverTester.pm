@@ -7,6 +7,9 @@ use warnings;
 use Test::Builder;
 
 use Capture::Tiny 'capture';
+use Compress::Zlib;
+use File::Path 'remove_tree';
+use File::Slurp qw( read_file write_file );
 
 use HTTP::Response;
 use CGI;
@@ -48,6 +51,14 @@ my $server;
         return 0;
     }
 
+    sub unlike($$;$) {
+        local $Test::Builder::Level = $Test::Builder::Level + 1;
+        return 1 if $_[0] !~ $_[1];
+        $Tester->unlike( $_[0], $_[1], $Test::name );
+        $Tester->diag( $_[2] ) if $_[2];
+        return 0;
+    }
+
     sub ok() {
         $Tester->ok( 1, $Test::name );
         return 1;
@@ -60,9 +71,11 @@ my $server;
 }
 
 sub setup_server {
+    my ( $mini_path ) = @_;
+
     eval {
         $server = CPAN::Mini::Webserver->new( 2963 );
-        $server->after_setup_listener( "t/mini/cache" );
+        $server->after_setup_listener( "$mini_path/cache" );
     };
 
     skip_all() if $@ && $@ =~ /Please set up minicpan/;
@@ -165,6 +178,18 @@ sub error404_ok {
 }
 push @EXPORT, "error404_ok";
 
+sub error500_ok {
+    my $path = shift;
+    my ( $code, $mime, $content, $response ) = make_request( $path, @_ );
+
+    local $Test::name = "error 500 for '$path'";
+    return unless is_num $code, 500, "when checking status";
+    ok;
+
+    return $response;
+}
+push @EXPORT, "error500_ok";
+
 sub download_ok {
     my $path = shift;
     my ( $code, $mime, $content ) = make_request( $path, @_ );
@@ -172,6 +197,7 @@ sub download_ok {
     local $Test::name = "download for '$path'";
     return unless is_num $code, 200,             "when checking status";
     return unless like $mime,   qr{^text/plain}, "when checking plain mimetype";
+    return unless unlike $mime, qr{charset},     "no charset is set for file downloads";
     ok;
 
     return $content;
@@ -212,6 +238,26 @@ sub make_request {
     return wantarray
       ? ( $r->code || "", $r->header( "Content-Type" ) || "", $r->content || "", $r )
       : $r->as_string;
+}
+
+push @EXPORT, "setup_test_minicpan";
+sub setup_test_minicpan {
+    my ( $mini_path ) = @_;
+
+    die "need a cpanmini path" if !$mini_path;
+
+    $ENV{CPAN_MINI_CONFIG} = "$mini_path/.minicpanrc";
+    remove_tree( "$mini_path/cache" );
+
+    for my $file ( map "$mini_path/$_", qw( authors/01mailrc.txt modules/02packages.details.txt ) ) {
+        my $gz_file = "$file.gz";
+        unlink $gz_file if -e $gz_file;
+        my $gz = Compress::Zlib::memGzip( read_file( $file, binmode => ':raw' ) ) or die "Cannot compress $file: $gzerrno\n";
+        write_file( $gz_file, { binmode => ':raw' }, $gz );
+    }
+
+    my $server = setup_server( $mini_path );
+    return $server;
 }
 
 "I wonder if dom's script that looks for true values at the end of modules looks in test modules too?";
