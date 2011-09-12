@@ -4,70 +4,118 @@ use List::MoreUtils qw(uniq);
 use Search::QueryParser;
 use String::CamelCase qw(wordsplit);
 use Text::Unidecode;
+use Search::Tokenizer;
+use Pod::Simple::Text;
+use Lingua::StopWords qw( getStopWords );
 
 has 'index' => ( is => 'rw', isa => 'HashRef', default => sub { {} } );
+has 'full_text' => ( is => 'ro' );
+has 'index_subs' => ( is => 'ro' );
 
 sub add {
     my ( $self, $key, $words ) = @_;
+
     my $index = $self->index;
-    foreach my $word ( @$words ) {
-        push @{ $index->{$word} }, $key;
-    }
+    push @{ $index->{$_} }, $key for @{$words};
+
+    return;
 }
 
 sub create_index {
     my ( $self, $parse_cpan_authors, $parse_cpan_packages ) = @_;
 
-    foreach my $author ( $parse_cpan_authors->authors ) {
-        my @words = split ' ', unidecode lc $author->name;
-        push @words, lc $author->pauseid;
-        $self->add( $author, \@words );
+    $self->_index_items_with( "_author_words",  $parse_cpan_authors->authors );
+    $self->_index_items_with( "_dist_words",    $parse_cpan_packages->latest_distributions );
+    $self->_index_items_with( "_package_words", $parse_cpan_packages->packages );
+
+    $self->_index_sub_routines( $parse_cpan_packages->packages ) if $self->index_subs;
+
+    return;
+}
+
+sub _index_sub_routines {
+    my ( $self, @packages ) = @_;
+
+    $self->{subs}{ $_ } = 1 for map { $_->subs } @packages;
+
+    return;
+}
+
+sub _index_items_with {
+    my ( $self, $method, @items ) = @_;
+
+    for my $item ( @items ) {
+        my @words = $self->$method( $item );
+        @words = uniq map { lc } @words;
+        $self->add( $item, \@words );
     }
 
-    foreach my $distribution ( $parse_cpan_packages->latest_distributions ) {
-        my @words;
-        foreach my $word ( split '-', unidecode $distribution->dist ) {
-            push @words, $word;
-            push @words, wordsplit $word;
-        }
-        @words = map { lc } uniq @words;
+    return;
+}
 
-        $self->add( $distribution, \@words );
+sub _author_words {
+    my ( $self, $author ) = @_;
+    my @words = ( $author->name, $author->pauseid );
+    return @words;
+}
+
+sub _dist_words {
+    my ( $self, $dist ) = @_;
+    my @words = split '-', unidecode $dist->dist;
+    @words = map { $_, wordsplit( $_ ) } @words;
+    return @words;
+}
+
+sub _package_words {
+    my ( $self, $package ) = @_;
+    my @words = split '::', unidecode $package->package;
+    @words = map { $_, wordsplit( $_ ) } @words;
+
+    push @words, $self->_full_text_words( $package ) if $self->full_text;
+
+    return @words;
+}
+
+sub _full_text_words {
+    my ( $self, $package ) = @_;
+    my @words = split '::', unidecode $package->package;
+    @words = map { $_, wordsplit( $_ ) } @words;
+
+    my $content = $package->file_content;
+    my $text;
+    my $parser = Pod::Simple::Text->new;
+    $parser->no_whining( 1 );
+    $parser->no_errata_section( 1 );
+    $parser->output_string( \$text );
+    $parser->parse_string_document( $content );
+
+    my $stopwords = { %{ getStopWords('en') }, NAME => 1, DESCRIPTION => 1, USAGE => 1, RETURNS => 1 };
+    my $iterator = Search::Tokenizer->new( regex => qr/\p{Word}+/, lower => 0, stopwords => $stopwords )->( $text );
+    while (my ($term, $len, $start, $end, $index) = $iterator->()) {
+        push @words, $term;
     }
 
-    foreach my $package ( $parse_cpan_packages->packages ) {
-        my @words;
-        foreach my $word ( split '::', unidecode $package->package ) {
-            push @words, $word;
-            push @words, wordsplit $word;
-        }
-        @words = map { lc } uniq @words;
-        $self->add( $package, \@words );
-    }
-
+    return @words;
 }
 
 sub search {
     my ( $self, $q ) = @_;
-    my $index = $self->index;
-    my @results;
 
     my $qp = Search::QueryParser->new( rxField => qr/NOTAFIELD/, );
     my $query = $qp->parse( $q, 1 );
-    unless ( $query ) {
+    return if !$query;
 
-        # warn "Error in query : " . $qp->err;
-        return;
-    }
+    my $index = $self->index;
+    my @results;
 
-    foreach my $part ( @{ $query->{'+'} } ) {
+    for my $part ( @{ $query->{'+'} } ) {
         my $value = $part->{value};
         my @words = split /(?:\:\:| |-)/, unidecode lc $value;
-        foreach my $word ( @words ) {
+        for my $word ( @words ) {
             my @word_results = @{ $index->{$word} || [] };
             if ( @results ) {
                 my %seen;
-                $seen{$_} = 1 foreach @word_results;
+                $seen{$_} = 1 for @word_results;
                 @results = grep { $seen{$_} } @results;
             }
             else {
@@ -76,11 +124,11 @@ sub search {
         }
     }
 
-    foreach my $part ( @{ $query->{'-'} } ) {
+    for my $part ( @{ $query->{'-'} } ) {
         my $value        = $part->{value};
         my @word_results = $self->search_word( $value );
         my %seen;
-        $seen{$_} = 1 foreach @word_results;
+        $seen{$_} = 1 for @word_results;
         @results = grep { !$seen{$_} } @results;
     }
 
@@ -89,13 +137,12 @@ sub search {
 
 sub search_word {
     my ( $self, $word ) = @_;
+
     my $index = $self->index;
-    my @results;
     my @words = split /(?:\:\:| |-)/, unidecode lc $word;
-    foreach my $word ( @words ) {
-        next unless exists $index->{$word};
-        push @results, @{ $index->{$word} };
-    }
+    @words = grep exists( $index->{$_} ), @words;
+
+    my @results = map @{ $index->{$_} }, @words;
     return @results;
 }
 

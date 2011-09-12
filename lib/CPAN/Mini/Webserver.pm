@@ -13,7 +13,7 @@ use List::MoreUtils qw(uniq);
 use Module::InstalledVersion;
 use Moose;
 use Parse::CPAN::Authors;
-use Parse::CPAN::Packages;
+use Parse::CPAN::Packages 2.34;
 use Parse::CPAN::Whois;
 use Parse::CPAN::Meta;
 use Pod::Simple::HTML;
@@ -33,31 +33,29 @@ else {
     extends 'HTTP::Server::Simple::CGI';
 }
 
-has 'hostname'            => ( is => 'rw' );
-has 'cgi'                 => ( is => 'rw', isa => 'CGI' );
-has 'directory'           => ( is => 'rw', isa => 'Path::Class::Dir' );
-has 'scratch'             => ( is => 'rw', isa => 'Path::Class::Dir' );
-has 'author_type'         => ( is => 'rw' );
-has 'parse_cpan_authors'  => ( is => 'rw' );
-has 'parse_cpan_packages' => ( is => 'rw', isa => 'Parse::CPAN::Packages' );
-has 'pauseid'             => ( is => 'rw' );
-has 'distvname'           => ( is => 'rw' );
-has 'filename'            => ( is => 'rw' );
-has 'index'               => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' );
+has hostname  => ( is => 'rw', lazy_build => 1 );
+has cgi       => ( is => 'rw', isa        => 'CGI', lazy_build => 1 );
+has directory => ( is => 'rw', isa        => 'Path::Class::Dir' );
+has scratch   => ( is => 'rw', isa        => 'Path::Class::Dir' );
+has author_type         => ( is => 'rw' );
+has parse_cpan_authors  => ( is => 'rw' );
+has parse_cpan_packages => ( is => 'rw', isa => 'Parse::CPAN::Packages' );
+has pauseid             => ( is => 'rw' );
+has distvname           => ( is => 'rw' );
+has filename            => ( is => 'rw' );
+has index               => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' );
+has config              => ( is => 'ro', lazy_build => 1 );
+has is_cgi              => ( is => 'rw' );
+has base_url            => ( is => 'ro', lazy_build => 1 );
 
-our $VERSION = '0.53';
+our $VERSION = '0.54';
 
 sub service_name {
     "$ENV{USER}'s minicpan_webserver";
 }
 
 sub get_file_from_tarball {
-    my ( $self, $distribution, $filename ) = @_;
-
-    my $file = file( $self->directory, 'authors', 'id', $distribution->prefix );
-    my $peek = Archive::Peek->new( filename => $file );
-    my $contents = $peek->file( $filename );
-    return $contents;
+    die "Deprecated above 0.53. This function can now be found in Parse::CPAN::Packages.";
 }
 
 sub checksum_data_for_author {
@@ -85,7 +83,6 @@ sub send_http_header {
     my $self   = shift;
     my $code   = shift;
     my %params = @_;
-    my $cgi    = $self->cgi;
 
     if (   ( defined $params{-charset} and $params{-charset} eq 'utf-8' )
         or ( defined $params{-type} and $params{-type} eq 'text/xml' ) )
@@ -95,8 +92,30 @@ sub send_http_header {
     elsif ( defined $params{-type} ) {
         binmode STDOUT, ":raw";
     }
-    print "HTTP/1.0 $code\015\012";
-    print $cgi->header( %params );
+    my $pre = "HTTP/1.0";
+    $pre = "Status:" if $self->is_cgi;
+    print "$pre $code\015\012";
+    print $self->cgi->header( %params );
+}
+
+sub _build_config {
+    my %config = CPAN::Mini->read_config;
+    return \%config;
+}
+
+sub _build_base_url {
+    my ( $self ) = @_;
+    return $self->config->{base_url} || "/";
+}
+
+sub _build_cgi {
+    my ( $self ) = @_;
+    return $self->cgi_class->new;
+}
+
+sub _build_hostname {
+    my ( $self ) = @_;
+    return $self->cgi->virtual_host;
 }
 
 # this is a hook that HTTP::Server::Simple calls after setting up the
@@ -104,8 +123,7 @@ sub send_http_header {
 sub after_setup_listener {
     my ( $self, $cache_dir ) = @_;
 
-    my %config    = CPAN::Mini->read_config;
-    my $directory = dir( glob $config{local} );
+    my $directory = dir( glob $self->config->{local} );
     $self->directory( $directory );
     my $authors_filename  = file( $directory, 'authors', '01mailrc.txt.gz' );
     my $packages_filename = file( $directory, 'modules', '02packages.details.txt.gz' );
@@ -117,6 +135,7 @@ sub after_setup_listener {
 
     my %cache_opts = ( ttl => 60 * 60 );
     $cache_opts{directory} = $cache_dir if $cache_dir;
+    $cache_opts{directory} = $self->config->{cache_dir} if $self->config->{cache_dir};
     my $cache = App::Cache->new( \%cache_opts );
 
     my $whois_filename = file( $directory, 'authors', '00whois.xml' );
@@ -137,7 +156,11 @@ sub after_setup_listener {
     my $scratch = dir( $cache->scratch );
     $self->scratch( $scratch );
 
-    my $index = CPAN::Mini::Webserver::Index->new;
+    my $index = CPAN::Mini::Webserver::Index->new(
+        mini_dir => $self->directory,
+        full_text => $self->config->{full_text},
+        index_subs => $self->config->{index_subs},
+    );
     $self->index( $index );
     $index->create_index( $parse_cpan_authors, $parse_cpan_packages );
 }
@@ -145,12 +168,14 @@ sub after_setup_listener {
 sub handle_request {
     my ( $self, $cgi ) = @_;
 
+    $self->cgi( $cgi ) if $cgi;
+
     my $result = try {
-        $self->_handle_request( $cgi );
+        $self->_handle_request;
     }
     catch {
         $self->send_http_header( 500 );
-        return "<h1>Internal Server Error</h1>", $cgi->escapeHTML( $_ );
+        return "<h1>Internal Server Error</h1>", $self->cgi->escapeHTML( $_ );
     };
     print $result;
 
@@ -160,10 +185,9 @@ sub handle_request {
 }
 
 sub _handle_request {
-    my ( $self, $cgi ) = @_;
-    $self->cgi( $cgi );
-    $self->hostname( $cgi->virtual_host() );
-    my $path = $cgi->path_info;
+    my ( $self ) = @_;
+
+    my $path = $self->cgi->path_info;
 
     # $raw, $download and $install should become $action?
     my ( $raw, $install, $download, $pauseid, $distvname, $filename, $prefix );
@@ -240,7 +264,7 @@ sub get_template_type_info {
 sub index_page {
     my $self = shift;
     $self->send_http_header( 200, -charset => 'utf-8' );
-    return Template::Declare->show(
+    return $self->render(
         'index',
         {
             recents            => $self->get_recent_dists,
@@ -272,7 +296,7 @@ sub not_found_page {
     my $q    = shift;
     my ( $authors, $dists, $packages ) = $self->_do_search( $q );
     $self->send_http_header( 404, -charset => 'utf-8' );
-    return Template::Declare->show(
+    return $self->render(
         '404',
         {
             parse_cpan_authors => $self->parse_cpan_authors,
@@ -286,7 +310,9 @@ sub not_found_page {
 
 sub redirect {
     my ( $self, $url ) = @_;
-    return "HTTP/1.0 302\015\012" . $self->cgi->redirect( $url );
+    my $status = "HTTP/1.0 302";
+    $status = "Status: 302" if $self->is_cgi;
+    return "$status\015\012" . $self->cgi->redirect( $self->base_url . $url );
 }
 
 sub search_page {
@@ -295,17 +321,52 @@ sub search_page {
     Encode::_utf8_on( $q );    # we know that we have sent utf-8
 
     my ( $authors, $dists, $packages ) = $self->_do_search( $q );
+    $packages = $self->_packages_with_search_preview( $packages, $q );
     $self->send_http_header( 200, -charset => 'utf-8' );
-    return Template::Declare->show(
+    return $self->render(
         'search',
         {
             parse_cpan_authors => $self->parse_cpan_authors,
             q                  => $q,
             authors            => $authors,
             distributions      => $dists,
-            packages           => $packages
+            packages           => $packages,
         }
     );
+}
+
+sub _packages_with_search_preview {
+    my ( $self, $packages, $q ) = @_;
+
+    my @packages = map $self->_add_search_preview( $_, $q ), @{$packages};
+
+    return \@packages;
+}
+
+sub _add_search_preview {
+    my ( $self, $package, $q ) = @_;
+
+    my $content = $package->file_content;
+    my $parser  = Pod::Simple::Text->new;
+    $parser->no_whining( 1 );
+    $parser->no_errata_section( 1 );
+    $parser->output_string( \my $text );
+    $parser->parse_string_document( $content );
+
+    $content = $text;
+    $content =~ s/[\n\r]/ /g;
+    $content =~ s/\s+/ /g;
+
+    my ( $match ) = ( $content =~ /($q)/i );
+    my $length = length $match;
+    my $pos = index $content, $match;
+
+    my $cap = ( 70 - $length ) / 2;
+
+    my $before = substr( $content, $pos - $cap,    $cap );
+    my $after  = substr( $content, $pos + $length, $cap );
+
+    return { match => { before => $before, after => $after, match => $match }, pkg => $package };
 }
 
 sub _do_search {
@@ -314,36 +375,36 @@ sub _do_search {
     my $index   = $self->index;
     my @results = $index->search( $q );
     my $au_type = $self->author_type;
-    my ( @authors, @distributions, @packages );
 
-    if ( $q !~ /\w(?:::|-)\w/ ) {
-        @authors = uniq grep { ref( $_ ) eq "Parse::CPAN::${au_type}::Author" } @results;
-    }
-    if ( $q !~ /\w::\w/ ) {
-        @distributions = uniq grep { ref( $_ ) eq 'Parse::CPAN::Packages::Distribution' } @results;
-    }
-    if ( $q !~ /\w-\w/ ) {
-        @packages = uniq grep { ref( $_ ) eq 'Parse::CPAN::Packages::Package' } @results;
+    my @base = ( \@results, $q );
+
+    my @packages = $self->_filter_sort_results( @base, qr/\w-\w/, 'Parse::CPAN::Packages::Package', "::", "package" );
+
+    if ( $self->cgi->param( 'find_only_subs' ) ) {
+        @packages = grep $_->has_matching_sub( qr/$q/i ), @packages;
+        return ( [], [], \@packages );
     }
 
-    @authors = sort { $a->name cmp $b->name } @authors;
-
-    @distributions = sort {
-        my @acount = $a->dist =~ /-/g;
-        my @bcount = $b->dist =~ /-/g;
-        scalar( @acount ) <=> scalar( @bcount )
-          || $a->dist cmp $b->dist
-    } @distributions;
-
-    @packages = sort {
-        my @acount = $a->package =~ /::/g;
-        my @bcount = $b->package =~ /::/g;
-        scalar( @acount ) <=> scalar( @bcount )
-          || $a->package cmp $b->package
-    } @packages;
+    my @authors       = $self->_filter_sort_results( @base, qr/\w(?:::|-)\w/, "Parse::CPAN::${au_type}::Author",     " ", "name" );
+    my @distributions = $self->_filter_sort_results( @base, qr/\w::\w/,       'Parse::CPAN::Packages::Distribution', "-", "dist" );
 
     return ( \@authors, \@distributions, \@packages );
+}
 
+sub _filter_sort_results {
+    my ( $self, $results, $q, $skip_regex, $class, $split_chars, $attr ) = @_;
+
+    return if $q =~ $skip_regex;
+
+    my @filtered = uniq grep { $class eq ref $_ } @{$results};
+
+    @filtered = sort {
+        my @a = $a->$attr =~ /$split_chars/g;
+        my @b = $b->$attr =~ /$split_chars/g;
+        scalar( @a ) <=> scalar( @b ) || $a->$attr cmp $b->$attr;
+    } @filtered;
+
+    return @filtered;
 }
 
 sub author_page {
@@ -357,13 +418,11 @@ sub author_page {
     my $checksum = $self->checksum_data_for_author( uc $pauseid );
     my %dates;
     if ( not $@ and defined $checksum ) {
-        foreach my $dist ( @distributions ) {
-            $dates{ $dist->distvname } = $checksum->{ $dist->filename }->{mtime};
-        }
+        $dates{ $_->distvname } = $checksum->{ $_->filename }->{mtime} for @distributions;
     }
 
     $self->send_http_header( 200, -charset => 'utf-8' );
-    return Template::Declare->show(
+    return $self->render(
         'author',
         {
             author        => $author,
@@ -383,7 +442,7 @@ sub distribution_page {
     my ( $distribution ) = grep { $_->cpanid eq uc $pauseid && $_->distvname eq $distvname } $self->parse_cpan_packages->distributions;
 
     my $filename = $distribution->distvname . "/META.yml";
-    my $metastr  = $self->get_file_from_tarball( $distribution, $filename );
+    my $metastr  = $distribution->get_file_from_tarball( $filename );
     my $meta     = {};
     my @yaml     = eval { Parse::CPAN::Meta::Load( $metastr ); };
     $meta = $yaml[0] if !$@;
@@ -391,10 +450,10 @@ sub distribution_page {
     my $checksum_data = $self->checksum_data_for_author( uc $pauseid );
     $meta->{'release date'} = $checksum_data->{ $distribution->filename }->{mtime};
 
-    my @filenames = $self->list_files( $distribution );
+    my @filenames = $distribution->list_files;
 
     $self->send_http_header( 200, -charset => 'utf-8' );
-    return Template::Declare->show(
+    return $self->render(
         'distribution',
         {
             author       => $self->parse_cpan_authors->author( uc $pauseid ),
@@ -416,7 +475,7 @@ sub pod_page {
     my $d = $m->distribution;
 
     my ( $pauseid, $distvname ) = ( $d->cpanid, $d->distvname );
-    my $url = "/package/$pauseid/$distvname/$pkgname/";
+    my $url = "package/$pauseid/$distvname/$pkgname/";
 
     $self->redirect( $url );
 }
@@ -449,11 +508,11 @@ sub file_page {
 
     my ( $distribution ) = grep { $_->cpanid eq uc $pauseid && $_->distvname eq $distvname } $self->parse_cpan_packages->distributions;
 
-    my $contents = $self->get_file_from_tarball( $distribution, $filename );
+    my $contents = $distribution->get_file_from_tarball( $filename );
 
     my $parser = Pod::Simple::HTML->new;
-    $parser->perldoc_url_prefix( '/perldoc?' );
-    $parser->index( 0 );
+    $parser->perldoc_url_prefix( $self->base_url . 'perldoc?' );
+    $parser->index( 1 );
     $parser->no_whining( 1 );
     $parser->no_errata_section( 1 );
     $parser->output_string( \my $html );
@@ -462,7 +521,7 @@ sub file_page {
     $html =~ s/<!-- end doc -->.*$//s;
 
     $self->send_http_header( 200, -charset => 'utf-8' );
-    return Template::Declare->show(
+    return $self->render(
         'file',
         {
             author       => $self->parse_cpan_authors->author( uc $pauseid ),
@@ -485,14 +544,14 @@ sub download_file {
     my ( $distribution ) = grep { $_->cpanid eq uc $pauseid && $_->distvname eq $distvname } $self->parse_cpan_packages->distributions;
     die "Distribution '$distvname' unknown for PAUSE id '$pauseid'." if !$distribution;
 
-    return $self->redirect( "/authors/id/" . $distribution->prefix ) if !$filename;
+    return $self->redirect( "authors/id/" . $distribution->prefix ) if !$filename;
 
-    my $contents = $self->get_file_from_tarball( $distribution, $filename );
+    my $contents = $distribution->get_file_from_tarball( $filename );
     $self->send_http_header(
         200,
-        -type   => 'text/plain',
+        -type           => 'text/plain',
         -content_length => length $contents,
-        -charset => '',
+        -charset        => '',
     );
 
     return $contents;
@@ -508,7 +567,7 @@ sub raw_page {
 
     my $file = file( $self->directory, 'authors', 'id', $distribution->prefix );
 
-    my $contents = $self->get_file_from_tarball( $distribution, $filename );
+    my $contents = $distribution->get_file_from_tarball( $filename );
 
     my $html;
 
@@ -529,7 +588,7 @@ sub raw_page {
         @lines = map { s{<span class="line_number">}{}; $_ } @lines;
 
         # remove newlines
-        $_ =~ s{<br>}{}g foreach @lines;
+        $_ =~ s{<br>}{}g for @lines;
 
         # link module names to ourselves
         @lines = map {
@@ -540,7 +599,7 @@ sub raw_page {
     }
 
     $self->send_http_header( 200, -charset => 'utf-8' );
-    return Template::Declare->show(
+    return $self->render(
         'raw',
         {
             author       => $self->parse_cpan_authors->author( uc $pauseid ),
@@ -559,7 +618,7 @@ sub dist_page {
     my ( $dist ) = $self->cgi->path_info =~ m{^/dist/(.+?)$};
     my $latest = $self->parse_cpan_packages->latest_distribution( $dist );
     if ( $latest ) {
-        $self->redirect( "/~" . $latest->cpanid . "/" . $latest->distvname );
+        $self->redirect( "~" . $latest->cpanid . "/" . $latest->distvname );
     }
     else {
         $self->not_found_page( $dist );
@@ -572,13 +631,10 @@ sub package_page {
     my ( $pauseid, $distvname, $package_name ) = $path =~ m{^/package/(.+?)/(.+?)/(.+?)/$};
 
     my ( $p ) = grep $self->is_package_for_package_page( $pauseid, $distvname, $package_name, $_ ), $self->parse_cpan_packages->packages;
-    my $distribution = $p->distribution;
-    my @filenames    = $self->list_files( $distribution );
-    my $package_file = $package_name;
-    $package_file =~ s{::}{/}g;
-    $package_file .= '.pm';
-    my ( $filename ) = grep { $_ =~ /$package_file/ } sort { length( $a ) <=> length( $b ) } @filenames;
-    my $url = "/~$pauseid/$distvname/$filename";
+    return $self->not_found_page( $package_name ) if !$p;
+
+    my $filename = $p->filename;
+    my $url      = "~$pauseid/$distvname/$filename";
 
     # TODO: duplicate results and no results here need to be handled (maybe search through contents of a dist in that case)
 
@@ -607,10 +663,10 @@ sub download_cpan {
 
     $self->send_http_header(
         200,
-        -type        => $content_type,
+        -type                => $content_type,
         -content_disposition => "attachment; filename=" . $file->basename,
         -content_length      => -s $fh,
-        -charset => '',
+        -charset             => '',
     );
     while ( <$fh> ) {
         print;
@@ -620,11 +676,61 @@ sub download_cpan {
 }
 
 sub list_files {
-    my ( $self, $distribution ) = @_;
-    my $file = file( $self->directory, 'authors', 'id', $distribution->prefix );
-    my $peek = Archive::Peek->new( filename => $file );
-    my @filenames = $peek->files;
-    return @filenames;
+    die "Deprecated above 0.53. This function can now be found in Parse::CPAN::Packages.";
+}
+
+sub packages_as_tree {
+    my ( $self ) = @_;
+
+    return {} if !$self->config->{side_bar};
+
+    my @packages = $self->parse_cpan_packages->packages;
+
+    my %tree;
+
+    for my $pkg ( @packages ) {
+        my @parts = split /::/, $pkg->package;
+        my $node = \%tree;
+        $node = $node->{children}{$_} ||= { name => $_ } for @parts;
+        $node->{package} = $pkg;
+    }
+
+    $self->_convert_children_to_array( \%tree );
+
+    return \%tree;
+}
+
+sub _convert_children_to_array {
+    my ( $self, $node ) = @_;
+
+    my @children = sort { $a->{name} cmp $b->{name} } values %{ $node->{children} };
+    $node->{children} = \@children;
+
+    $self->_convert_children_to_array( $_ ) for @children;
+
+    return;
+}
+
+sub render {
+    my ( $self, $template, $params ) = @_;
+
+    $params                     ||= {};
+    $params->{packages_as_tree} ||= $self->packages_as_tree;
+    $params->{base_url}         ||= $self->base_url;
+    $params->{doc_mode}         ||= $self->config->{doc_mode};
+    $params->{index}            ||= $self->index;
+
+    return Template::Declare->show( $template, $params );
+}
+
+sub process_single_cgi_request {
+    my ( $self ) = @_;
+
+    $self->is_cgi( 1 );
+    $self->after_setup_listener;
+    $self->handle_request;
+
+    return;
 }
 
 sub direct_to_template {
@@ -638,7 +744,7 @@ sub direct_to_template {
         ( $mime ? ( -type => $mime ) : () ),
     );
 
-    return Template::Declare->show( $template );
+    return $self->render( $template );
 }
 
 1;
