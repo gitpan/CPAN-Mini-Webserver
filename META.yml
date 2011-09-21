@@ -36,19 +36,19 @@ no_index:
 provides:
   CPAN::Mini::Webserver:
     file: lib/CPAN/Mini/Webserver.pm
-    version: 0.56
+    version: 0.57
   CPAN::Mini::Webserver::Index:
     file: lib/CPAN/Mini/Webserver/Index.pm
-    version: 0.56
+    version: 0.57
   CPAN::Mini::Webserver::Templates:
     file: lib/CPAN/Mini/Webserver/Templates.pm
-    version: 0.56
+    version: 0.57
   CPAN::Mini::Webserver::Templates::CSS:
     file: lib/CPAN/Mini/Webserver/Templates/CSS.pm
-    version: 0.56
+    version: 0.57
   CPAN::Mini::Webserver::Templates::Images:
     file: lib/CPAN/Mini/Webserver/Templates/Images.pm
-    version: 0.56
+    version: 0.57
 requires:
   App::Cache: 0
   Archive::Peek: 0.33
@@ -90,4 +90,4 @@ resources:
   bugtracker: http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Mini-Webserver
   homepage: https://github.com/wchristian/cpan-mini-webserver
   repository: https://github.com/wchristian/cpan-mini-webserver.git
-version: 0.56
+version: 0.57

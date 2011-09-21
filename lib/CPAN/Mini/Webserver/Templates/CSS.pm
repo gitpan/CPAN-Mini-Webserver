@@ -5,7 +5,7 @@ package CPAN::Mini::Webserver::Templates::CSS;
 
 # ABSTRACT: static CSS content for a CPAN::Mini web server
 
-our $VERSION = '0.56'; # VERSION
+our $VERSION = '0.57'; # VERSION
 
 use Template::Declare::Tags;
 use base 'Template::Declare';
@@ -419,7 +419,7 @@ CPAN::Mini::Webserver::Templates::CSS - static CSS content for a CPAN::Mini web 
 
 =head1 VERSION
 
-version 0.56
+version 0.57
 
 =head1 DESCRIPTION
 

@@ -5,7 +5,7 @@ package CPAN::Mini::Webserver::Templates::Images;
 
 # ABSTRACT: image content for a CPAN::Mini web server
 
-our $VERSION = '0.56'; # VERSION
+our $VERSION = '0.57'; # VERSION
 
 use MIME::Base64;
 use Template::Declare::Tags;
@@ -75,7 +75,7 @@ CPAN::Mini::Webserver::Templates::Images - image content for a CPAN::Mini web se
 
 =head1 VERSION
 
-version 0.56
+version 0.57
 
 =head1 DESCRIPTION
 

@@ -5,7 +5,7 @@ package CPAN::Mini::Webserver::Templates;
 
 # ABSTRACT: templates for the CPAN::Mini web server
 
-our $VERSION = '0.56'; # VERSION
+our $VERSION = '0.57'; # VERSION
 
 use Template::Declare::Tags 0.29;
 use base 'Template::Declare';
@@ -885,7 +885,7 @@ CPAN::Mini::Webserver::Templates - templates for the CPAN::Mini web server
 
 =head1 VERSION
 
-version 0.56
+version 0.57
 
 =head1 DESCRIPTION
 

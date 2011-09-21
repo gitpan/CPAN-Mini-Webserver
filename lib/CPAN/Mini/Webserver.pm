@@ -5,7 +5,7 @@ package CPAN::Mini::Webserver;
 
 # ABSTRACT: Search and browse Mini CPAN
 
-our $VERSION = '0.56'; # VERSION
+our $VERSION = '0.57'; # VERSION
 
 use App::Cache;
 use Archive::Peek 0.33;
@@ -767,7 +767,7 @@ CPAN::Mini::Webserver - Search and browse Mini CPAN
 
 =head1 VERSION
 
-version 0.56
+version 0.57
 
 =head1 SYNOPSIS
 

@@ -5,7 +5,7 @@ package CPAN::Mini::Webserver::Index;
 
 # ABSTRACT: search term index for a CPAN::Mini web server
 
-our $VERSION = '0.56'; # VERSION
+our $VERSION = '0.57'; # VERSION
 
 use Moose;
 use List::MoreUtils qw(uniq);
@@ -166,7 +166,7 @@ CPAN::Mini::Webserver::Index - search term index for a CPAN::Mini web server
 
 =head1 VERSION
 
-version 0.56
+version 0.57
 
 =head1 DESCRIPTION
 
