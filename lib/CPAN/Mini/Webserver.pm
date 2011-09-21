@@ -1,7 +1,15 @@
+use strict;
+use warnings;
+
 package CPAN::Mini::Webserver;
+
+# ABSTRACT: Search and browse Mini CPAN
+
+our $VERSION = '0.56'; # VERSION
+
 use App::Cache;
-use Archive::Peek;
-use CPAN::Mini::App;
+use Archive::Peek 0.33;
+use CPAN::Mini::App 0.565;
 use CPAN::Mini::Webserver::Index;
 use CPAN::Mini::Webserver::Templates;
 use CPAN::Mini::Webserver::Templates::CSS;
@@ -10,11 +18,13 @@ use Encode;
 use File::Spec::Functions qw( canonpath catfile );
 use File::Type;
 use List::MoreUtils qw(uniq);
+use HTTP::Server::Simple 0.34;
+use HTTP::Server::Simple::CGI;
 use Module::InstalledVersion;
 use Moose;
 use Parse::CPAN::Authors;
-use Parse::CPAN::Packages 2.34;
-use Parse::CPAN::Whois;
+use Parse::CPAN::Packages 2.35;
+use Parse::CPAN::Whois 0.02;
 use Parse::CPAN::Meta;
 use Pod::Simple::HTML;
 use Path::Class;
@@ -47,8 +57,6 @@ has index               => ( is => 'rw', isa => 'CPAN::Mini::Webserver::Index' )
 has config              => ( is => 'ro', lazy_build => 1 );
 has is_cgi              => ( is => 'rw' );
 has base_url            => ( is => 'ro', lazy_build => 1 );
-
-our $VERSION = '0.55';
 
 sub service_name {
     "$ENV{USER}'s minicpan_webserver";
@@ -749,11 +757,17 @@ sub direct_to_template {
 
 1;
 
-__END__
+
+
+=pod
 
 =head1 NAME
 
 CPAN::Mini::Webserver - Search and browse Mini CPAN
+
+=head1 VERSION
+
+version 0.56
 
 =head1 SYNOPSIS
 
@@ -764,27 +778,52 @@ CPAN::Mini::Webserver - Search and browse Mini CPAN
 This module is the driver that provides a web server that allows you to search
 and browse Mini CPAN. See L<minicpan_webserver> for details on its use.
 
-=head1 SUPPORT
-
-You may access the Git repository at:
-
-  https://github.com/wchristian/cpan-mini-webserver
-
-And may send support requests on RT.
-
 =head1 CURRENT MAINTAINER
 
 Christian Walde <walde.christian@googlemail.com>
 
-=head1 AUTHOR
+=for :stopwords cpan testmatrix url annocpan anno bugtracker rt cpants kwalitee diff irc mailto metadata placeholders
+
+=head1 SUPPORT
+
+=head2 Bugs / Feature Requests
+
+Please report any bugs or feature requests by email to C<bug-cpan-mini-webserver at rt.cpan.org>, or through
+the web interface at L<http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Mini-Webserver>. You will be automatically notified of any
+progress on the request by the system.
+
+=head2 Source Code
+
+This is open source software.  The code repository is available for
+public review and contribution under the terms of the license.
+
+L<https://github.com/wchristian/cpan-mini-webserver>
+
+  git clone https://github.com/wchristian/cpan-mini-webserver.git
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
 
 Leon Brocard <acme@astray.com>
 
-=head1 COPYRIGHT
+=item *
 
-Copyright (C) 2008, Leon Brocard.
+Christian Walde <walde.christian@googlemail.com>
 
-=head1 LICENSE
+=back
 
-This module is free software; you can redistribute it or
-modify it under the same terms as Perl itself.
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2011 by Christian Walde.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut
+
+
+__END__
+

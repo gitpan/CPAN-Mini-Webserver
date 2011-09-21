@@ -1,6 +1,12 @@
-package CPAN::Mini::Webserver::Templates::Images;
 use strict;
 use warnings;
+
+package CPAN::Mini::Webserver::Templates::Images;
+
+# ABSTRACT: image content for a CPAN::Mini web server
+
+our $VERSION = '0.56'; # VERSION
+
 use MIME::Base64;
 use Template::Declare::Tags;
 use base 'Template::Declare';
@@ -58,3 +64,47 @@ END
 };
 
 1;
+
+
+
+=pod
+
+=head1 NAME
+
+CPAN::Mini::Webserver::Templates::Images - image content for a CPAN::Mini web server
+
+=head1 VERSION
+
+version 0.56
+
+=head1 DESCRIPTION
+
+This module holds the images for
+CPAN::Mini::Webserver.
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
+
+Leon Brocard <acme@astray.com>
+
+=item *
+
+Christian Walde <walde.christian@googlemail.com>
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2011 by Christian Walde.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut
+
+
+__END__
+

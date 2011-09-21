@@ -1,6 +1,12 @@
-package CPAN::Mini::Webserver::Templates::CSS;
 use strict;
 use warnings;
+
+package CPAN::Mini::Webserver::Templates::CSS;
+
+# ABSTRACT: static CSS content for a CPAN::Mini web server
+
+our $VERSION = '0.56'; # VERSION
+
 use Template::Declare::Tags;
 use base 'Template::Declare';
 
@@ -402,3 +408,47 @@ END
 };
 
 1;
+
+
+
+=pod
+
+=head1 NAME
+
+CPAN::Mini::Webserver::Templates::CSS - static CSS content for a CPAN::Mini web server
+
+=head1 VERSION
+
+version 0.56
+
+=head1 DESCRIPTION
+
+This module holds the CSS content for
+CPAN::Mini::Webserver.
+
+=head1 AUTHORS
+
+=over 4
+
+=item *
+
+Leon Brocard <acme@astray.com>
+
+=item *
+
+Christian Walde <walde.christian@googlemail.com>
+
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2011 by Christian Walde.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut
+
+
+__END__
+

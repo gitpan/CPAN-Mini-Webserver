@@ -1,6 +1,13 @@
 #!perl
 use strict;
 use warnings;
+
+package minicpan_webserver;
+
+# ABSTRACT: run a CPAN::Mini web server on the command line
+
+our $VERSION = '0.56'; # VERSION
+
 use lib '../lib';
 use lib 'lib';
 use CPAN::Mini::Webserver;
@@ -12,11 +19,17 @@ GetOptions( "port=i" => \$port, );
 my $server = CPAN::Mini::Webserver->new( $port );
 $server->run;
 
-__END__
+
+
+=pod
 
 =head1 NAME
 
-minicpan_webserver - Search and browse Mini CPAN
+minicpan_webserver - run a CPAN::Mini web server on the command line
+
+=head1 VERSION
+
+version 0.56
 
 =head1 SYNOPSIS
 
@@ -101,13 +114,29 @@ the underlying code. This can be achieved by setting the doc_mode parameter in
 
 Christian Walde <walde.christian@googlemail.com>
 
-=head1 AUTHOR
+=head1 AUTHORS
+
+=over 4
+
+=item *
 
 Leon Brocard <acme@astray.com>
 
-=head1 COPYRIGHT
+=item *
 
-Copyright (C) 2008, Leon Brocard.
+Christian Walde <walde.christian@googlemail.com>
 
-This module is free software; you can redistribute it or
-modify it under the same terms as Perl itself.
+=back
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is copyright (c) 2011 by Christian Walde.
+
+This is free software; you can redistribute it and/or modify it under
+the same terms as the Perl 5 programming language system itself.
+
+=cut
+
+
+__END__
+
