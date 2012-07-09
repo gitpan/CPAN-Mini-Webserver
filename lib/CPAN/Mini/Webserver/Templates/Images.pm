@@ -5,7 +5,7 @@ package CPAN::Mini::Webserver::Templates::Images;
 
 # ABSTRACT: image content for a CPAN::Mini web server
 
-our $VERSION = '0.57'; # VERSION
+our $VERSION = '0.58'; # VERSION
 
 use MIME::Base64;
 use Template::Declare::Tags;
@@ -75,7 +75,7 @@ CPAN::Mini::Webserver::Templates::Images - image content for a CPAN::Mini web se
 
 =head1 VERSION
 
-version 0.57
+version 0.58
 
 =head1 DESCRIPTION
 
@@ -98,7 +98,7 @@ Christian Walde <walde.christian@googlemail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2011 by Christian Walde.
+This software is copyright (c) 2012 by Christian Walde.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

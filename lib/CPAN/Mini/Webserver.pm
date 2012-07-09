@@ -5,7 +5,7 @@ package CPAN::Mini::Webserver;
 
 # ABSTRACT: Search and browse Mini CPAN
 
-our $VERSION = '0.57'; # VERSION
+our $VERSION = '0.58'; # VERSION
 
 use App::Cache;
 use Archive::Peek 0.33;
@@ -767,7 +767,7 @@ CPAN::Mini::Webserver - Search and browse Mini CPAN
 
 =head1 VERSION
 
-version 0.57
+version 0.58
 
 =head1 SYNOPSIS
 
@@ -782,15 +782,15 @@ and browse Mini CPAN. See L<minicpan_webserver> for details on its use.
 
 Christian Walde <walde.christian@googlemail.com>
 
-=for :stopwords cpan testmatrix url annocpan anno bugtracker rt cpants kwalitee diff irc mailto metadata placeholders
+=for :stopwords cpan testmatrix url annocpan anno bugtracker rt cpants kwalitee diff irc mailto metadata placeholders metacpan
 
 =head1 SUPPORT
 
 =head2 Bugs / Feature Requests
 
-Please report any bugs or feature requests by email to C<bug-cpan-mini-webserver at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Mini-Webserver>. You will be automatically notified of any
-progress on the request by the system.
+Please report any bugs or feature requests through the issue tracker
+at L<http://rt.cpan.org/Public/Dist/Display.html?Name=CPAN-Mini-Webserver>.
+You will be notified automatically of any progress on your issue.
 
 =head2 Source Code
 
@@ -817,7 +817,7 @@ Christian Walde <walde.christian@googlemail.com>
 
 =head1 COPYRIGHT AND LICENSE
 
-This software is copyright (c) 2011 by Christian Walde.
+This software is copyright (c) 2012 by Christian Walde.
 
 This is free software; you can redistribute it and/or modify it under
 the same terms as the Perl 5 programming language system itself.

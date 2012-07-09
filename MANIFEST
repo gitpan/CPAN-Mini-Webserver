@@ -9,6 +9,7 @@ README.mkdn
 bin/minicpan_webserver
 corpus/mini/.minicpanrc
 corpus/mini/authors/01mailrc.txt
+corpus/mini/authors/01mailrc.txt.gz
 corpus/mini/authors/id/A/AN/ANDK/CHECKSUMS
 corpus/mini/authors/id/A/AN/ANDK/CHECKSUMS.2nd
 corpus/mini/authors/id/A/AN/ANDK/CPAN-Test-Dummy-Perl5-Build-1.03.tar.gz
@@ -128,13 +129,20 @@ corpus/mini/authors/id/A/AN/CHECKSUMS
 corpus/mini/authors/id/A/CHECKSUMS
 corpus/mini/authors/id/CHECKSUMS
 corpus/mini/authors/id/M/ME/MELEZHIK/AMZ_TEST-0.0.2.tar.gz
+corpus/mini/cache/parse_cpan_authors
+corpus/mini/cache/parse_cpan_packages
 corpus/mini/modules/02packages.details.txt
+corpus/mini/modules/02packages.details.txt.gz
 corpus/mini/modules/03modlist.data
 corpus/mini_whois/.minicpanrc
 corpus/mini_whois/authors/00whois.xml
 corpus/mini_whois/authors/01mailrc.txt
+corpus/mini_whois/authors/01mailrc.txt.gz
 corpus/mini_whois/authors/id/A/AN/ANDK/CPAN-Test-Dummy-Perl5-Build-1.03.tar.gz
+corpus/mini_whois/cache/cache/parse_cpan_packages
+corpus/mini_whois/cache/cache/parse_cpan_whois
 corpus/mini_whois/modules/02packages.details.txt
+corpus/mini_whois/modules/02packages.details.txt.gz
 dist.ini
 lib/CPAN/Mini/Webserver.pm
 lib/CPAN/Mini/Webserver/Index.pm
@@ -147,7 +155,5 @@ t/lib/WebserverTester.pm
 t/simple.t
 t/whois.t
 xt/release/distmeta.t
-xt/release/kwalitee.t
-xt/release/pod-coverage.t
 xt/release/pod-syntax.t
 xt/release/test-version.t
